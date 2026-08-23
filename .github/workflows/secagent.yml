@@ -1,0 +1,42 @@
+name: SecAgent checks
+
+on:
+  push:
+    branches:
+      - feat/secagent-security-kernel
+    paths:
+      - ".pi/**"
+      - ".mcp.json"
+      - "tsconfig.json"
+      - ".github/workflows/secagent.yml"
+  pull_request:
+    paths:
+      - ".pi/**"
+      - ".mcp.json"
+      - "tsconfig.json"
+      - ".github/workflows/secagent.yml"
+
+jobs:
+  secagent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HUSKY: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.19.0"
+          cache: npm
+
+      - name: Install monorepo dependencies
+        run: npm ci
+
+      - name: Run SecAgent tests
+        run: npx tsx --test .pi/secagent/tests/*.test.ts
+
+      - name: Type-check repository and SecAgent entrypoints
+        run: npx tsgo --noEmit
