@@ -1,5 +1,6 @@
 import { isIP } from "node:net";
 import type { ScopeAssessment, ScopeTarget, ScopeTargetKind, SecurityScope } from "./types.ts";
+import { extractMcpNetworkTargets } from "../integrations/mcp-policy.ts";
 import { resolveToolCall } from "../tools/registry.ts";
 
 const NETWORK_INPUT_KEYS = new Set([
@@ -143,6 +144,9 @@ export function assessToolScope(toolName: string, input: Record<string, unknown>
 	if (toolName === "bash") {
 		const command = typeof input.command === "string" ? input.command : "";
 		if (required) targets = extractTextTargets(command);
+	} else if (toolName === "mcp") {
+		targets = extractMcpNetworkTargets(input);
+		required = targets.length > 0;
 	} else {
 		targets = collectInputTargets(input);
 		if (!resolution.known && targets.length > 0) required = true;
