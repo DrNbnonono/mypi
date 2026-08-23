@@ -1,0 +1,9 @@
+{
+	"settings": {
+		"hostConfigDiscovery": "off",
+		"directTools": false,
+		"freezeDirectTools": true,
+		"autoAuth": false
+	},
+	"mcpServers": {}
+}
