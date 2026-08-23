@@ -1,0 +1,19 @@
+{
+	"packages": [
+		{
+			"source": "npm:pi-sandbox@0.6.3"
+		},
+		{
+			"source": "npm:pi-mcp-adapter@2.23.0",
+			"skills": []
+		},
+		{
+			"source": "npm:pi-subagents@0.50.0",
+			"skills": [],
+			"prompts": []
+		},
+		{
+			"source": "npm:pi-trace-extension@0.1.14"
+		}
+	]
+}
