@@ -1,4 +1,5 @@
 import type { RiskLevel, SecurityToolMetadata, ToolResolution } from "../core/types.ts";
+import { resolveMcpProxyCall } from "../integrations/mcp-policy.ts";
 import { SECURITY_TOOL_CATALOG } from "./catalog.ts";
 
 const RISK_RANK: Record<RiskLevel, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
@@ -76,6 +77,8 @@ export function extractShellExecutables(command: string): string[] {
 }
 
 export function resolveToolCall(toolName: string, input: Record<string, unknown>): ToolResolution {
+	if (toolName === "mcp") return resolveMcpProxyCall(input);
+
 	if (toolName !== "bash") {
 		const metadata = getSecurityToolMetadata(toolName);
 		if (!metadata) {
@@ -123,7 +126,7 @@ export function resolveToolCall(toolName: string, input: Record<string, unknown>
 
 export function planningRiskForTool(toolName: string, riskHint?: number): number {
 	const metadata = getSecurityToolMetadata(toolName);
-	const floor = riskLevelToScore(metadata?.baseRisk ?? "P1");
+	const floor = toolName === "mcp" ? riskLevelToScore("P2") : riskLevelToScore(metadata?.baseRisk ?? "P1");
 	if (riskHint === undefined || !Number.isFinite(riskHint)) return floor;
 	return Math.max(floor, Math.max(0, Math.min(1, riskHint)));
 }
