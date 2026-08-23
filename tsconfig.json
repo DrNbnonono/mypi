@@ -38,6 +38,7 @@
 	"include": [
 		".pi/secagent/**/*.ts",
 		".pi/extensions/security-agent.ts",
+		".pi/extensions/security-report.ts",
 		".pi/extensions/plan-mode.ts",
 		".pi/extensions/subagent.ts",
 		".pi/extensions/questionnaire.ts",
