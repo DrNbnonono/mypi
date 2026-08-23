@@ -2,45 +2,65 @@
 
 SecAgent is the project-local cybersecurity intelligence layer built on top of Pi. Pi remains the generic agent harness; SecAgent owns security state, authorization scope, decision policy, tool metadata, audit, reporting, and specialist-agent behavior.
 
+Generic runtime capabilities are reused from pinned Pi packages instead of being forked into this repository.
+
 ## Repository layout
 
 ```text
+.mcp.json                         # conservative project MCP config
 .pi/
-├── SECAGENT.md                     # this architecture guide
-├── agents/                         # project specialist definitions
+├── SECAGENT.md                   # this architecture guide
+├── settings.json                 # pinned project-local Pi packages
+├── sandbox.json                  # fail-closed sandbox policy
+├── agents/                       # project specialist definitions
 │   ├── sec-recon.md
 │   ├── sec-web.md
 │   ├── sec-analysis.md
 │   └── sec-response.md
-├── extensions/                     # thin Pi extension entrypoints
-│   ├── security-agent.ts           # SecAgent state/policy/scope control plane
-│   ├── security-report.ts          # reproducible Markdown/JSON reports
-│   ├── plan-mode.ts                # maintained Pi extension wrapper
-│   ├── subagent.ts                 # maintained Pi extension wrapper
-│   ├── questionnaire.ts            # maintained Pi extension wrapper
-│   ├── tools.ts                    # maintained Pi extension wrapper
-│   ├── protected-paths.ts          # maintained Pi extension wrapper
-│   └── project-trust.ts            # maintained Pi extension wrapper
+├── extensions/                   # thin project extension entrypoints
+│   ├── security-agent.ts         # SecAgent state/policy/scope control plane
+│   ├── security-report.ts        # reproducible Markdown/JSON reports
+│   ├── plan-mode.ts              # maintained Pi example wrapper
+│   ├── questionnaire.ts          # maintained Pi example wrapper
+│   ├── tools.ts                  # maintained Pi example wrapper
+│   ├── protected-paths.ts        # maintained Pi example wrapper
+│   └── project-trust.ts          # maintained Pi example wrapper
 └── secagent/
-    ├── core/                       # security decision kernel
+    ├── core/                     # security decision kernel
     │   ├── types.ts
     │   ├── state.ts
     │   ├── planner.ts
     │   ├── policy.ts
     │   ├── scope.ts
     │   └── audit.ts
-    ├── tools/                      # structured security-tool registry
+    ├── integrations/             # thin bridges to packaged runtimes
+    │   ├── README.md
+    │   └── mcp-policy.ts
+    ├── tools/                    # structured security-tool registry
     │   ├── catalog.ts
     │   └── registry.ts
-    ├── report/                     # report/export logic without Pi UI coupling
+    ├── report/                   # report/export logic without Pi UI coupling
     │   └── generator.ts
-    └── tests/                      # deterministic kernel/report tests
+    └── tests/                    # deterministic kernel/integration tests
         ├── scope.test.ts
         ├── tool-registry.test.ts
+        ├── mcp-integration.test.ts
+        ├── runtime-config.test.ts
         └── report.test.ts
 ```
 
-The extension entrypoints are deliberately thin relative to Pi core: reusable SecAgent-specific logic lives under `.pi/secagent/`. Maintained Pi plugins are referenced through small project-local wrappers instead of copied forks.
+The extension entrypoints are deliberately thin relative to Pi core. Reusable SecAgent-specific logic lives under `.pi/secagent/`. Third-party Pi packages are installed through project settings instead of copied or forked.
+
+## Runtime packages
+
+`.pi/settings.json` pins:
+
+- `pi-sandbox@0.6.3` — OS-level filesystem/network sandboxing.
+- `pi-mcp-adapter@2.23.0` — MCP discovery and lazy proxy execution.
+- `pi-subagents@0.50.0` — child-agent orchestration, parallel/chain/background workflows.
+- `pi-trace-extension@0.1.14` — local execution traces, including nested child-agent traces.
+
+Pi installs missing project packages after the project is trusted. Generic package skills/prompts are disabled where SecAgent already supplies its own operating protocol and specialist definitions.
 
 ## Runtime control flow
 
@@ -53,9 +73,10 @@ User task
   -> security_decide
   -> structured tool registry
   -> risk policy + scope policy
+  -> package runtime (MCP / subagent / sandbox)
   -> ALLOW / CONFIRM / BLOCK
   -> Pi tool execution
-  -> audit record
+  -> audit record + Pi execution trace
   -> evidence / state update
   -> re-plan
   -> security_report
@@ -72,7 +93,7 @@ User task
 
 ## Structured tool registry
 
-The registry gives tools explicit metadata rather than relying primarily on command-name heuristics:
+The registry gives native security tools explicit metadata rather than relying primarily on command-name heuristics:
 
 - canonical name and aliases
 - category
@@ -84,6 +105,30 @@ The registry gives tools explicit metadata rather than relying primarily on comm
 - recommended specialist agents
 
 `security_decide` uses registry risk as a hard lower bound, so an LLM cannot lower a P3 tool to P0 by supplying an optimistic risk score. Shell calls are resolved into nested known executables and inherit the highest relevant registry risk.
+
+MCP transport is not reimplemented. The single `mcp` proxy tool is interpreted by `.pi/secagent/integrations/mcp-policy.ts`: discovery is low risk, delegated mutations receive P2/P3 floors, and nested network targets are checked against `security_scope` before execution.
+
+## Sandbox boundary
+
+`pi-sandbox` is enabled through `.pi/sandbox.json`. Network access starts fail-closed with no pre-authorized domains, while project files are writable except protected Git/environment/key material.
+
+A target therefore must pass two independent boundaries:
+
+1. SecAgent scope/policy authorization.
+2. OS-level sandbox permission.
+
+This keeps SecAgent from pretending that an application-level target check is equivalent to process isolation.
+
+## Multi-agent and delegation trace
+
+`pi-subagents` replaces the earlier repository wrapper around Pi's example subagent implementation. SecAgent continues to own the project specialist definitions under `.pi/agents/`.
+
+`pi-trace-extension` captures runtime execution trees, nested child sessions, timing, model/tool activity, token usage, and errors. This complements the SecAgent decision audit rather than replacing it:
+
+- Pi trace answers: what executed, where, when, and in which child session?
+- SecAgent audit answers: why was it allowed, what scope/risk applied, what evidence changed, and what decision followed?
+
+Trace artifacts may contain sensitive prompts/tool arguments and must be reviewed before sharing.
 
 ## Audit and reports
 
@@ -100,17 +145,9 @@ Useful commands:
 /sec-audit [limit]
 /sec-mode strict|competition
 /sec-report [markdown|json]
+/mcp
+/sandbox
+/trace
 ```
 
-## Reused Pi extensions
-
-Enabled project-locally:
-
-- plan mode
-- subagent delegation
-- questionnaire
-- interactive tool selector
-- protected paths
-- project trust
-
-The generic Pi `permission-gate` extension is intentionally not enabled because SecAgent owns P0-P3 risk classification and approval. Sandbox/Gondolin integration is the next isolated runtime layer and will be enabled only after its filesystem and network policies are derived from SecAgent authorization scope rather than a fixed development allowlist.
+The generic Pi `permission-gate` extension remains disabled because SecAgent owns P0-P3 classification and approval. Third-party package versions are pinned and should be source-reviewed before upgrades.
