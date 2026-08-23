@@ -36,7 +36,14 @@
 		}
 	},
 	"include": [
-		".pi/**/*.ts",
+		".pi/secagent/**/*.ts",
+		".pi/extensions/security-agent.ts",
+		".pi/extensions/plan-mode.ts",
+		".pi/extensions/subagent.ts",
+		".pi/extensions/questionnaire.ts",
+		".pi/extensions/tools.ts",
+		".pi/extensions/protected-paths.ts",
+		".pi/extensions/project-trust.ts",
 		"packages/*/src/**/*",
 		"packages/*/test/**/*",
 		"packages/session-backends/*/src/**/*",
