@@ -1,6 +1,6 @@
 # SecAgent on Pi
 
-SecAgent is the project-local cybersecurity intelligence layer built on top of Pi. Pi remains the generic agent harness; SecAgent owns security state, authorization scope, decision policy, tool metadata, audit, and specialist-agent behavior.
+SecAgent is the project-local cybersecurity intelligence layer built on top of Pi. Pi remains the generic agent harness; SecAgent owns security state, authorization scope, decision policy, tool metadata, audit, reporting, and specialist-agent behavior.
 
 ## Repository layout
 
@@ -12,8 +12,9 @@ SecAgent is the project-local cybersecurity intelligence layer built on top of P
 │   ├── sec-web.md
 │   ├── sec-analysis.md
 │   └── sec-response.md
-├── extensions/                     # Pi extension entrypoints
-│   ├── security-agent.ts           # SecAgent control-plane extension
+├── extensions/                     # thin Pi extension entrypoints
+│   ├── security-agent.ts           # SecAgent state/policy/scope control plane
+│   ├── security-report.ts          # reproducible Markdown/JSON reports
 │   ├── plan-mode.ts                # maintained Pi extension wrapper
 │   ├── subagent.ts                 # maintained Pi extension wrapper
 │   ├── questionnaire.ts            # maintained Pi extension wrapper
@@ -31,12 +32,15 @@ SecAgent is the project-local cybersecurity intelligence layer built on top of P
     ├── tools/                      # structured security-tool registry
     │   ├── catalog.ts
     │   └── registry.ts
-    └── tests/                      # deterministic kernel tests
+    ├── report/                     # report/export logic without Pi UI coupling
+    │   └── generator.ts
+    └── tests/                      # deterministic kernel/report tests
         ├── scope.test.ts
-        └── tool-registry.test.ts
+        ├── tool-registry.test.ts
+        └── report.test.ts
 ```
 
-The extension entrypoint is deliberately thin relative to Pi core: all SecAgent-specific reusable logic lives under `.pi/secagent/`. Maintained Pi plugins are referenced through small project-local wrappers instead of copied forks.
+The extension entrypoints are deliberately thin relative to Pi core: reusable SecAgent-specific logic lives under `.pi/secagent/`. Maintained Pi plugins are referenced through small project-local wrappers instead of copied forks.
 
 ## Runtime control flow
 
@@ -54,6 +58,7 @@ User task
   -> audit record
   -> evidence / state update
   -> re-plan
+  -> security_report
 ```
 
 ## Policy model
@@ -80,6 +85,23 @@ The registry gives tools explicit metadata rather than relying primarily on comm
 
 `security_decide` uses registry risk as a hard lower bound, so an LLM cannot lower a P3 tool to P0 by supplying an optimistic risk score. Shell calls are resolved into nested known executables and inherit the highest relevant registry risk.
 
+## Audit and reports
+
+Security state is event-sourced through Pi session entries. Tool execution writes structured audit entries containing registry resolution, risk, scope decisions, approval state, input summaries, results, and block reasons.
+
+`security_report` and `/sec-report` build reproducible output directly from the current session branch. Markdown is intended for review and competition demonstrations; JSON is intended for replay, evaluation, and later report-processing pipelines.
+
+Useful commands:
+
+```text
+/sec-state
+/sec-scope
+/sec-tools
+/sec-audit [limit]
+/sec-mode strict|competition
+/sec-report [markdown|json]
+```
+
 ## Reused Pi extensions
 
 Enabled project-locally:
@@ -91,4 +113,4 @@ Enabled project-locally:
 - protected paths
 - project trust
 
-The generic Pi `permission-gate` extension is intentionally not enabled because SecAgent owns P0-P3 risk classification and approval. Sandbox/Gondolin integration is the next isolated runtime layer and will be enabled only after deployment behavior is validated.
+The generic Pi `permission-gate` extension is intentionally not enabled because SecAgent owns P0-P3 risk classification and approval. Sandbox/Gondolin integration is the next isolated runtime layer and will be enabled only after its filesystem and network policies are derived from SecAgent authorization scope rather than a fixed development allowlist.
