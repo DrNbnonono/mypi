@@ -168,6 +168,9 @@ export type AnthropicEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
 export type AnthropicThinkingDisplay = "summarized" | "omitted";
 
+// Anthropic Messages 适配器还要处理 Thinking 签名、工具 ID、cache_control、
+// deferred tools 和 OAuth/Claude Code 兼容字段；这些都是协议转换，不属于 Agent 循环。
+
 type MessageCreateParamsStreamingWithFallbacks = MessageCreateParamsStreaming & {
 	fallbacks?: readonly { model: string }[];
 };

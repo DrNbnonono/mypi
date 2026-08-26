@@ -26,6 +26,9 @@ export type KnownApi =
 	| "google-vertex"
 	| "pi-messages";
 
+// Api 表示上游线协议的适配器，不表示服务商。多个 Provider 可以复用同一个 Api，
+// 例如 OpenRouter、Groq 和 DeepSeek 都可以使用 openai-completions。
+
 export type Api = KnownApi | (string & {});
 
 export type KnownImagesApi = "openrouter-images";
@@ -104,10 +107,10 @@ export interface ThinkingBudgets {
 	high?: number;
 }
 
-// Base options all providers share 不同模型提供商基本的共享选项
+// 通用的 Provider 请求选项和缓存策略；具体 API 还会在这些选项之上扩展自己的字段。
 export type CacheRetention = "none" | "short" | "long";
 
-// 协议转换
+// 请求传输方式，而不是上游协议转换方式。
 export type Transport = "sse" | "websocket" | "websocket-cached" | "auto";
 
 /** Provider-scoped environment overrides. Values take precedence over process.env. */
@@ -121,7 +124,11 @@ export interface ProviderResponse {
 	headers: Record<string, string>;
 }
 
-/** Authentication, HTTP transport, and lifecycle callbacks shared by provider requests. */
+/**
+ * Authentication, HTTP transport, and lifecycle callbacks shared by provider requests.
+ * ProviderRequestOptions 是 API 适配器实际接收的通用请求能力；鉴权通常由 Models
+ * 先解析，再把 apiKey、headers、env 等字段放入这里。
+ */
 export interface ProviderRequestOptions<TModel = Model<Api>> {
 	signal?: AbortSignal;
 	/** Explicit parent context for telemetry produced by this logical request. */
@@ -272,6 +279,7 @@ export type ApiStreamOptions<TApi extends Api> = TApi extends keyof ApiOptionsMa
  * 这里的是API实现模块的统一流契约：每个位于`src/api/`下的模块都导出`stream`和`streamSimple`；有能力的模块也可以导出延迟响应方法。延迟包装器(`lazyApi()`)和提供程序工厂将这些作为值传递。这是未类型化的调度形状；每个API的选项类型化存在于实现模块本身以及通过`ApiStreamOptions`在`Provider.stream()`上。
  */
 export interface ProviderStreams {
+	// 这是 API 实现模块的统一运行时形状，不是 Provider 本身；Provider 会持有并调用它。
 	stream(model: Model<Api>, context: Context, options?: StreamOptions): AssistantMessageEventStream;
 	streamSimple(model: Model<Api>, context: Context, options?: SimpleStreamOptions): AssistantMessageEventStream;
 	fetchDeferred?(
@@ -290,6 +298,7 @@ export interface ProviderStreams {
  * 这是图像生成API实现模块的统一契约：每个位于`src/api/`下的图像API模块都精确地导出`generateImages`，因此模块本身满足此接口。延迟包装器和图像提供程序工厂将这些作为值传递。
  */
 export interface ProviderImages {
+	// 图片 API 与聊天 API 分开：图片生成是一次性 Promise，不使用聊天事件流。
 	generateImages(
 		model: ImagesModel<ImagesApi>,
 		context: ImagesContext,
@@ -313,7 +322,8 @@ export interface AnthropicAllowedFallbackModel {
 	cost: ModelCost;
 }
 
-// Unified options with reasoning passed to streamSimple() and completeSimple()
+// 传给 streamSimple()/completeSimple() 的 Provider 无关选项。
+// reasoning 会在具体 API 适配器中转换为该服务商支持的 Thinking 参数。
 export interface SimpleStreamOptions extends StreamOptions {
 	/** Provider-neutral tool selection for simple requests. Default: "auto". */
 	toolChoice?: ToolChoice;
@@ -537,7 +547,7 @@ export interface Tool<TParameters extends TSchema = TSchema> {
 	constrainedSampling?: false | ConstrainedSamplingConfig;
 }
 
-// 上下文接口
+// 一次模型请求的可序列化上下文。Tool 只描述工具，不在 ai 包内执行工具。
 export interface Context {
 	systemPrompt?: string;
 	messages: Message[];
@@ -844,7 +854,7 @@ export interface ModelCost extends ModelCostRates {
 	tiers?: ModelCostTier[];
 }
 
-// Model interface for the unified model system
+// 具体模型的纯数据描述。Model 不包含请求方法，运行时行为由 model.provider 对应的 Provider 提供。
 export interface Model<TApi extends Api> {
 	id: string;
 	name: string;
@@ -876,6 +886,7 @@ export interface Model<TApi extends Api> {
 					: never;
 }
 
+// 导出图片模型
 export interface ImagesModel<TApi extends ImagesApi>
 	extends Omit<Model<Api>, "api" | "provider" | "reasoning" | "contextWindow" | "maxTokens" | "compat"> {
 	api: TApi;

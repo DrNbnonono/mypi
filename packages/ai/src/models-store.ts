@@ -1,5 +1,6 @@
 import type { Api, Model } from "./types.ts";
 
+// ModelsStore 只持久化动态 Provider 的模型快照，不负责模型查询、认证或发起网络请求。
 export interface ModelsStoreEntry {
 	models: readonly Model<Api>[];
 	/** Unix timestamp from the remote catalog's Last-Modified header. */

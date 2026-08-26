@@ -2,7 +2,7 @@
  * Agent loop that works with AgentMessage throughout.
  * Transforms to Message[] only at the LLM call boundary.
  */
-
+// 真正的 LLM ↔ Tool 循环
 import {
 	type AssistantMessage,
 	type Context,

@@ -2,121 +2,241 @@
 
 ## 1. 解决的问题
 
-`@earendil-works/pi-ai` 的职责不是 Agent，而是把不同 LLM 统一为相同的调用模型，输出为统一的消息格式，事件流：Message、UserMessage、AssistantMessage、ToolResultMessage 等，对外稳定
+`@earendil-works/pi-ai` 是 LLM 调用与适配层，不是 Agent。
+
+它把不同服务商的请求格式、消息格式、流式响应、鉴权、模型元数据和错误行为，统一成一套 TypeScript 类型与调用协议。Agent 层只需要处理统一的 `Context`、`AssistantMessage` 和 `AssistantMessageEventStream`，不需要直接理解 Anthropic、OpenAI、Google 或 Bedrock 的线协议。
 
 它主要提供：
 
-- Provider 集合和 Provider 工厂；
+- Provider 集合与 Provider 工厂；
 - 模型目录、模型能力和模型成本定义；
-- OpenAI、Anthropic、Google、Bedrock 等 API 的适配；
+- Anthropic、OpenAI、Google、Bedrock、Mistral 等 API 适配；
 - API Key、环境变量、OAuth 和 Credential Store；
-- 流式文本、Thinking、Tool Call 和 Partial JSON 事件；
-- Token、Cache、Cost 和 Stop Reason 统计；
-- 图片输入和图片生成；
-- Retry、Abort、Proxy 和 Provider Header 处理；
-- 动态模型目录刷新。
+- 文本、Thinking、Tool Call 的流式事件；
+- 部分 JSON 的增量解析与工具 Schema 校验辅助；
+- Token、Prompt Cache、Cost 和 Stop Reason 归一化；
+- 图片输入和独立的图片生成子系统；
+- Retry、Abort、Proxy、Header 和 Provider 兼容性处理；
+- 动态模型目录刷新与持久化；
+- 延迟响应和跨 Provider 上下文转换；
+- Faux Provider，供 Agent 和回归测试使用。
 
-> 把任意 LLM Provider 的请求 / 响应 / 流 / 鉴权 / 模型元数据，统一成同一组 TypeScript 类型 + 同一种 stream() / complete() 调用方式。
+一句话概括：
+
+> `pi-ai` 将“服务商运行时 + 模型元数据 + 上游协议适配 + 鉴权”组合起来，对外提供统一的消息和流式调用接口。
 
 ## 2. 分层架构
 
 <img src="./figures/02-01-整体框架.png" alt="02-01-整体框架.png" style="zoom: 25%;" />
 
-- 核心类型位于 [`packages/ai/src/types.ts`](../packages/ai/src/types.ts)，其故意只导出类型+通用工具。这样上层的agent/coding agenty要拿到provider必须显式：[agent-treeshake-smoke-entry.ts:L1-L13](../scripts/agent-treeshake-smoke-entry.ts#L1-L13) 
-- Provider 汇总位于 [`packages/ai/src/providers/all.ts`](../packages/ai/src/providers/all.ts)
-- API 适配位于 [`packages/ai/src/api/`](../packages/ai/src/api/)
-- 认证代码位于 [`packages/ai/src/auth/`](../packages/ai/src/auth/)。
-
-## 3. 核心概念逐一拆解
-
-### 3.1 Model / Provider / Api
-
-- `Model<Api>`：核心类型，描述一个具体的模型。`Api` 是字面量联合（`"anthropic-messages"` / `"openai-completions"` / `"openai-responses"` / `"openai-codex-responses"` / `"google-generative-ai"` / `"google-vertex"` / `"bedrock-converse"` / `"mistral-conversations"` / `"azure-openai-responses"` / `"openrouter"` …）。每个 `Api` 对应 `api/<name>.ts`。
-- `Provider<Api>`：一个 provider 工厂，输出 `getModel / listModels / streamSimple / completeSimple`，并持有 API endpoint + 鉴权细节。
-- 同一 provider 可能支持多种 `Api`（比如 OpenAI 同时有 `openai-completions` / `openai-responses` / `openai-codex-responses`），用 `Provider<Api>` 的泛型区分。
-
-对于 Agent 主路径，模型需要支持可靠的 Tool Calling，因为 Agent 需要根据模型返回的工具调用执行文件、Shell 或网络操作。不过 `pi-ai` 本身不等于编码 Agent，它也包含基础对话、图片和 Provider 级别的能力。
-
-### 3.2 消息 / 内容 [types.ts:L358-L507](../packages/ai/src/types.ts#L358-L507)
-
-- 通用 `Message` = `UserMessage | AssistantMessage | ToolResultMessage`。
-
-- 内容块（
-
-  ```
-  Content
-  ```
-
-  ）包括：
-
-  - 文本（`text`）、思考（`thinking`），
-  - 图像（`image` — 输入侧 base64 / URL，输出侧按 provider 不同会回到 tool call 或 image-model result），
-  - tool call（`toolCall` — id / name / arguments），
-  - tool result（`toolResult` — toolCallId / content / isError）。
-
-- 顶层还有 `SimpleStreamOptions` / `PiMessagesOptions`，把 `temperature` / `maxTokens` / `reasoning`（thinking budget / level）/ `cacheRetention` / `signal` 等收口。
-
-### 3.3 流（Stream）
-
-调用方式统一是 `stream(model, context, options): AssistantMessageEventStream`：
-
-ts
-
-Copy
-
-```
-type AssistantMessageEventStream = AsyncIterable<AssistantMessageEvent>;
-type AssistantMessageEvent =
-  | { type: "start"; partial: AssistantMessage }
-  | { type: "text"; delta: string; partial: AssistantMessage }
-  | { type: "thinking"; delta: string; partial: AssistantMessage }
-  | { type: "tool_call"; delta: ToolCallDelta; partial: AssistantMessage }
-  | { type: "done"; message: AssistantMessage; reason: ... }
-  | { type: "error"; error: ... };
-```
-
-这是上层 agent 循环真正消费的协议——`agent-loop.ts` 直接 `for await (const ev of stream)`。
-
-### 3.4 模型元数据 / Models Store
-
-- `Model` 上的字段：`name / id / api / provider / baseUrl / reasoning / input / cost / contextWindow / maxTokens / headers / compat` …
-- `models.ts` 暴露类型；`models-store.ts` 提供 `getModel(provider, id)`、`searchModels()` 等。
-- 模型快照在构建时生成到 `src/providers/data/*.json`；运行时通过 `*.models.ts` 静态 import 或动态 `getModel` 查询。
-
-### 3.5 鉴权（`src/auth/`）
-
-- `auth/types.ts`：鉴权相关 discriminated union（API Key / OAuth / NoAuth / Custom）。
-- `auth/context.ts`：把"用户在哪里提供 key"（env、settings、keychain 等）抽象成 `AuthContext`。
-- `auth/credential-store.ts`：跨进程持久化的 key store。
-- `auth/helpers.ts`：常用 helper，比如 `resolveApiKey`。
-- 单独入口 `@earendil-works/pi-ai/oauth` 与 `./bun-oauth`：OAuth + Bun 专用实现（因为 Bun 自带 fetch 和 WebSocket，OAuth 流程可省依赖）。
-- `./bedrock-provider`：Amazon Bedrock 走的是 AWS SigV4 + Converse Runtime，单独包出来避免主 bundle 引入 AWS SDK。
-
-### 3.6 图片生成（`./compat/extension-oauth-types.ts` 与 `images-models.ts`）
-
-- `images-models.ts`：列出图片生成模型清单（不同 provider）。
-- 走的是 `Models` 里带 `output: ["image"]` 的子集；上层用 `getImageModel()` + `generateImage()` 一类函数。
-- 注意：图片生成跟文本生成走的是**不同的 Api**（如 `"openai-image"`、`"google-image"`），但都遵守同一个 `ImageModel` 接口。
-
-### 3.7 Faux Provider（`./providers/faux`）
-
-测试 / fake 用的假 provider：固定返回编排好的文本与 tool call，`agent-loop` 的回归测试靠它跑而不打真实 API。`packages/coding-agent/test/suite/` 走的就是这个。
-
-### 3.8 兼容层 `./compat`
-
-老式全局 API（无 provider 工厂、直接根据 model 自动路由）。新代码**不要**用，应该显式 `import` provider。新代码用 `./api/*` + `./providers/*`。
-
-### 3.9 公用工具（`utils/`）
-
-`event-stream`（SSE / NDJSON 解析与自适应）、`json-parse`（含 partial JSON，兼容 Anthropic streaming）、`overflow`（参数超限自动截断）、`retry`（带指数回退）、`validation`（基于 TypeBox 的入参校验）、`typebox-helpers`（TS ↔ JSON Schema 转换）、`uuid`（v7 生成）。`contentText` 是从混合 content 数组里快速抽 text 的工具函数。
-
-模型元数据由脚本和 Provider 数据生成：
+当前最重要的是四个职责边界：
 
 ```text
-packages/ai/scripts/
-packages/ai/src/models.generated.ts
-packages/ai/src/image-models.generated.ts
-packages/ai/src/providers/data/
+Model       纯数据：某个具体模型的能力、地址、价格和兼容性
+Provider    运行时：某个服务商的模型列表、鉴权和请求分发
+Api         线协议：把 Context 转为上游请求，并把响应转为统一事件
+Models      编排器：注册 Provider、解析鉴权、选择 Provider、提供调用入口
 ```
 
-生成文件不应该直接手工修改，应修改生成脚本后重新生成。
+源码位置：
+
+- 核心类型：[`src/types.ts`](../packages/ai/src/types.ts)
+- `Models`、`Provider` 和 `createProvider()`：[`src/models.ts`](../packages/ai/src/models.ts)
+- 内置 Provider 集合：[`src/providers/all.ts`](../packages/ai/src/providers/all.ts)
+- API 适配器：[`src/api/`](../packages/ai/src/api/)
+- 鉴权系统：[`src/auth/`](../packages/ai/src/auth/)
+- 图片模型集合：[`src/images-models.ts`](../packages/ai/src/images-models.ts)
+
+根入口保持相对轻量，不自动注册全部内置 Provider。需要完整集合时显式导入 `providers/all`；需要小体积构建时只导入目标 Provider。示例见 [`agent-treeshake-smoke-entry.ts`](../scripts/agent-treeshake-smoke-entry.ts)。
+
+## 3. 一次文本请求的调用链
+
+```text
+Models.stream(model, context, options)
+        ↓
+根据 model.provider 找到 Provider
+        ↓
+通过 Provider.auth 解析 API Key / OAuth / 环境配置
+        ↓
+合并 Provider、Model 和请求级 headers；必要时覆盖 baseUrl
+        ↓
+Provider.stream() 或 Provider.streamSimple()
+        ↓
+根据 model.api 选择 API 实现
+        ↓
+lazy 加载 SDK，组装上游请求
+        ↓
+将上游响应解析为 AssistantMessageEvent
+        ↓
+以 done 或 error 结束
+```
+
+`complete()` 和 `completeSimple()` 不是另一套非流式协议，它们内部等待流的 `.result()`，最后得到 `AssistantMessage`。普通请求的失败也不会直接从流函数抛出，而是编码为 `error` 事件和一个 `stopReason` 为 `error` 或 `aborted` 的最终消息。
+
+## 4. 核心概念
+
+### 4.1 Model / Provider / Api / Models
+
+`Model<Api>` 描述一个具体模型，是可序列化的纯数据，不包含请求方法。主要字段包括 `id`、`name`、`api`、`provider`、`baseUrl`、`headers`、`reasoning`、`thinkingLevelMap`、`input`、`cost`、`contextWindow`、`maxTokens` 和 `compat`。
+
+当前内置 `KnownApi` 包括：
+
+```text
+openai-completions
+openai-responses
+openai-codex-responses
+azure-openai-responses
+anthropic-messages
+google-generative-ai
+google-vertex
+mistral-conversations
+bedrock-converse-stream
+pi-messages
+```
+
+`Api` 是可扩展字符串联合类型，所以自定义 Provider 也可以使用自定义 API ID。
+
+`Provider` 是服务商运行时，负责暴露 `getModels()`、`auth`、`stream()`、`streamSimple()`，以及可选的动态模型刷新、凭据相关模型过滤和延迟响应。`Models` 是多个 Provider 的运行时集合，负责注册 Provider、根据 `model.provider` 路由请求、解析鉴权、合并请求配置，并提供 `getModel()`、`complete()` 等便利方法。
+
+因此，OpenRouter 是 Provider，不是 Api；它当前复用 `openai-completions`。一个 Provider 也可能支持多个 Api，例如 GitHub Copilot、OpenCode 和 Cloudflare AI Gateway。`Provider<TApi>` 的泛型主要服务于静态类型检查；动态查找的模型通常需要使用 `hasApi()` 缩小类型。
+
+### 4.2 消息、内容块和上下文
+
+`Message` 是 `UserMessage | AssistantMessage | ToolResultMessage`。内容块包括 `TextContent`、`ThinkingContent`、`ImageContent` 和 `ToolCall`。
+
+`ToolResultMessage` 是顶层消息，不是 `AssistantMessage.content` 中的内容块。它可以包含文本和图片，并通过 `toolCallId` 对应之前的工具调用。
+
+`Context` 包含 `systemPrompt`、`messages` 和可选的 `tools`。`Tool` 使用 TypeBox Schema 描述参数。`pi-ai` 负责工具格式转换和参数校验辅助；工具真正的执行由 Agent 层负责。
+
+### 4.3 流事件
+
+统一入口是：
+
+```ts
+stream(model, context, options): AssistantMessageEventStream
+```
+
+实际事件协议是：
+
+```text
+start
+text_start / text_delta / text_end
+thinking_start / thinking_delta / thinking_end
+toolcall_start / toolcall_delta / toolcall_end
+done 或 error
+```
+
+文本、Thinking 和工具参数都通过 `contentIndex` 指向 `partial.content` 中的内容块。不同内容块的事件可能交错，消费方不能假设某个块的 start/delta/end 期间不会出现其他块的事件。
+
+`toolcall_delta` 中的参数是尽力解析的部分 JSON，字段可能不完整；`toolcall_end` 时参数完整，但仍需要经过工具 Schema 校验后才能执行。
+
+`AssistantMessageEventStream` 是异步事件队列，同时提供 `.result()`。`result()` 会在 `done` 或 `error` 事件到达后返回最终 `AssistantMessage`。
+
+### 4.4 `streamSimple()` 与 API 专用选项
+
+`streamSimple()` 不是“简单的流”，而是 Provider 无关的高级接口。它接收统一的 `reasoning: "minimal" | "low" | "medium" | "high" | "xhigh" | "max"`，再转换成不同上游的 `reasoning_effort`、Anthropic thinking、Gemini thinking 或 DeepSeek/Qwen/ZAI 的自定义字段。
+
+`stream()` 接收具体 API 的完整选项，例如 Anthropic 的 `thinkingEnabled`、OpenAI Responses 的 `reasoningEffort`。`model.reasoning` 只是能力元数据，不会自动开启 Thinking。
+
+### 4.5 Usage、Cost 和 StopReason
+
+`Usage` 统一记录 input/output/cacheRead/cacheWrite/totalTokens/cost。价格来自 `Model.cost`，单位是每百万 Token；`calculateCost()` 支持价格阶梯和 Anthropic 长缓存写入价格。
+
+`StopReason` 包括 `pending`、`stop`、`length`、`toolUse`、`error`、`aborted` 和 `deferred`。其中 `deferred` 表示请求先返回 `DeferredHandle`，稍后通过 `fetchDeferred()` 获取结果。
+
+### 4.6 图片输入与图片生成
+
+图片输入属于聊天模型的输入能力：`Model.input` 包含 `image` 时，`UserMessage` 或 `ToolResultMessage` 可以包含 `ImageContent`。如果目标模型不支持图片，消息转换层会将图片降级为占位文本。
+
+图片生成是完全独立的子系统，不是文本 `Models` 中带有 `output: ["image"]` 的子集：
+
+```text
+ImagesModel / ImagesProvider / ImagesModels / AssistantImages
+```
+
+调用方法是 `generateImages()`，返回 `AssistantImages`，图片输出位于 `AssistantImages.output`。当前内置图片 API 是 `openrouter-images`，当前内置图片 Provider 是 OpenRouter。`getImageModel()` 属于旧的静态图片目录入口；新代码应使用 `builtinImagesModels()` 或 `createImagesModels()`。
+
+### 4.7 模型目录与动态刷新
+
+静态内置目录由生成脚本维护。`generate-models.ts` 会合并 models.dev、Provider 专用接口和手工兼容性修正，生成：
+
+```text
+src/providers/data/*.json
+src/providers/*.models.ts
+src/models.generated.ts
+```
+
+这些生成文件不应直接手工修改，应修改生成脚本或数据源后重新生成。
+
+`Models.getModels()` 和 `Models.getModel()` 是同步读取当前已知目录，不负责网络请求。动态 Provider 可以实现 `refreshModels()`；`Models.refresh()` 负责缓存恢复、鉴权、网络刷新、持久化、并发控制、取消和错误收集。
+
+`getAvailable()` 与 `getModels()` 不同：前者会确认 Provider 已配置鉴权，并应用 Provider 的凭据相关模型过滤。
+
+### 4.8 鉴权
+
+Provider 的鉴权类型是 `ProviderAuth { apiKey?: ApiKeyAuth; oauth?: OAuthAuth }`。Credential 目前只有 `api_key` 和 `oauth` 两种，没有单独的 `NoAuth` 或 `Custom` 鉴权联合类型。
+
+无密钥本地服务、AWS 凭据链等场景，通常仍通过 `ApiKeyAuth.resolve()` 表达；它可以返回空的 `auth`，表示请求依赖环境或 SDK 的 ambient credentials。
+
+鉴权来源可能包括请求级配置、注入的 `CredentialStore`、环境变量、AWS Profile、AWS credential chain、Google ADC 以及 OAuth 登录和刷新。
+
+请求级配置优先级大致是：
+
+```text
+Provider auth → Model headers → 请求级 headers → transformHeaders
+```
+
+存储凭据后，CredentialStore 中的凭据拥有该 Provider；OAuth 刷新失败时不会悄悄回退到环境变量。OAuth 刷新在串行的 `modify()` 中执行，以避免并发请求重复刷新 Token。
+
+`AuthContext` 只抽象环境变量读取和文件存在性检查；settings、keychain 或文件持久化由应用注入的 `CredentialStore` 实现负责。包内默认是内存 CredentialStore。
+
+### 4.9 Lazy、Tree Shaking 与 Bedrock
+
+Provider 工厂通常引用 `api/*.lazy.ts`，API 的 SDK 在第一次实际请求时加载。这样只使用一个 Provider 的应用可以避免引入其他 Provider 的 SDK。
+
+Bedrock 的 Node-only AWS SDK 通过 bundler 不易追踪的动态导入加载。`bedrock-provider` 不是另一套鉴权系统，而是为 Bun 或单文件构建提供显式的 Bedrock 实现模块覆盖入口。
+
+### 4.10 Faux Provider
+
+Faux Provider 是内存中的假 Provider，可以按队列返回预先编排的文本、Thinking 和工具调用，并模拟流式增量、Usage、Prompt Cache、Abort 和 deferred response。Agent 和 coding-agent 的测试大量使用 Faux 辅助函数，但部分 coding-agent 测试也有自己的 `createFauxStreamFn`。
+
+### 4.11 跨 Provider 转换
+
+`transformMessages()` 会根据目标模型处理不同 Provider 的 Thinking 签名、工具调用 ID、图片能力、消息顺序、工具结果和延迟工具格式。切换 Provider 时，某些 Thinking 或签名可能被转换为普通文本或被丢弃。
+
+### 4.12 `compat` 旧接口
+
+`@earendil-works/pi-ai/compat` 保留旧的全局 API：全局 API registry、根据 `model.api` 分发 `stream()` / `complete()`、静态 `getModel()` / `getModels()` / `getProviders()`、环境变量 API Key 注入、旧版 API 别名和图片生成入口。
+
+新代码优先使用：
+
+```ts
+createModels()
+providerFactory()
+models.setProvider(provider)
+models.stream() / models.complete()
+```
+
+## 5. 公共工具的准确职责
+
+- `event-stream`：异步事件队列、迭代和最终结果承诺；
+- `json-parse`：部分 JSON 和带修复能力的 JSON 解析；
+- `overflow`：识别上下文溢出和可恢复的 length stop，不是通用参数截断器；
+- `retry`、`provider-retry`：通用和 Provider 请求重试；
+- `validation`、`typebox-helpers`：TypeBox Schema 校验和转换；
+- `transform-messages`：跨 Provider 消息与能力转换；
+- `estimate`：上下文 Token 估算；
+- `headers`、`provider-env`：请求头和 Provider 级环境处理；
+- `abort`：请求取消和 AbortSignal 协调；
+- `contentText`：从混合内容块中提取文本；
+- `uuid`：生成 UUID v7。
+
+## 6. 阅读源码的建议顺序
+
+1. 先读 [`types.ts`](../packages/ai/src/types.ts)：理解数据协议和事件协议。
+2. 再读 [`models.ts`](../packages/ai/src/models.ts)：理解 `Models` 如何解析鉴权和分发 Provider。
+3. 读 [`providers/openai.ts`](../packages/ai/src/providers/openai.ts) 和 [`providers/anthropic.ts`](../packages/ai/src/providers/anthropic.ts)：理解 Provider 工厂如何组装模型、鉴权和 API。
+4. 读 [`api/openai-completions.ts`](../packages/ai/src/api/openai-completions.ts) 或 [`api/anthropic-messages.ts`](../packages/ai/src/api/anthropic-messages.ts)：理解消息转换、上游响应解析和统一事件生成。
+5. 最后读 [`api/transform-messages.ts`](../packages/ai/src/api/transform-messages.ts)、[`auth/resolve.ts`](../packages/ai/src/auth/resolve.ts) 和动态 Provider [`providers/radius.ts`](../packages/ai/src/providers/radius.ts)。
+
+最重要的判断标准是：看到一个功能时，先问它属于纯数据模型、Provider 运行时、Api 线协议，还是 Models 编排器。这样不容易把 `Provider`、`Api`、`Models` 和 `compat` 混在一起。

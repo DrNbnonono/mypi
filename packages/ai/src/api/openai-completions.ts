@@ -171,6 +171,10 @@ export interface ConvertCompletionsMessagesOptions {
 	grammarToolInputProperties?: ReadonlyMap<string, string>;
 }
 
+// OpenAI Chat Completions 是多个 Provider 共用的线协议适配器。这里负责把统一的
+// Context 转成 Chat Completions 请求，也负责将文本、Thinking、工具调用和 usage
+// 解析成 AssistantMessageEvent；Provider 名称和 API 名称因此是两个维度。
+
 interface OpenAICompatCacheControl {
 	type: "ephemeral";
 	ttl?: string;

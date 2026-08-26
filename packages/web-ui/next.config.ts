@@ -12,7 +12,10 @@ try {
 } catch { /* package not found, use default */ }
 
 const nextConfig: NextConfig = {
-  outputFileTracingRoot: configDir,
+  outputFileTracingRoot: join(configDir, "..", ".."),
+  turbopack: {
+    root: join(configDir, "..", ".."),
+  },
   serverExternalPackages: [
     "undici",
     "@earendil-works/pi-coding-agent",

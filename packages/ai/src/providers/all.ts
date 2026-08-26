@@ -133,6 +133,7 @@ export function builtinProviders(): Provider[] {
 
 /** A `Models` collection with every built-in provider registered. */
 export function builtinModels(options?: CreateModelsOptions): MutableModels {
+	// 这是重量级入口：显式构造并注册全部内置 Provider；小体积应用应只导入单个工厂。
 	const models = createModels(options);
 	for (const provider of builtinProviders()) {
 		models.setProvider(provider);
@@ -147,6 +148,7 @@ export function builtinImagesProviders(): ImagesProvider[] {
 
 /** An `ImagesModels` collection with every built-in image-generation provider registered. */
 export function builtinImagesModels(options?: CreateModelsOptions): MutableImagesModels {
+	// 图片 Provider 集合独立于聊天侧的 builtinModels()。
 	const models = createImagesModels(options);
 	for (const provider of builtinImagesProviders()) {
 		models.setProvider(provider);

@@ -17,6 +17,7 @@ export interface RadiusProviderOptions {
 }
 
 /** Radius gateway provider with a persisted, dynamically refreshed catalog. */
+// Radius 是动态模型目录的代表：先恢复 ModelsStore，再按凭据从 gateway 获取模型。
 export function radiusProvider(options: RadiusProviderOptions = {}): Provider<"pi-messages"> {
 	const id = options.id ?? "radius";
 	const name = options.name ?? "Radius";

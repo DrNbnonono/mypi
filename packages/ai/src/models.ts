@@ -89,6 +89,9 @@ export type ModelsDeferredCancelOptions = DeferredCancelOptions & ModelsRequestT
  * A provider is the concrete runtime unit. It owns id/name/base metadata,
  * auth methods, model listing, and stream behavior.
  *
+ * Provider 是服务商运行时；它不是模型集合。getModel()/completeSimple() 等集合级
+ * 便利方法属于 Models，Provider 只提供 getModels()/stream()/streamSimple() 等能力。
+ *
  * `TApi` lets concrete provider factories declare which APIs their models
  * use (e.g. `openaiProvider(): Provider<"openai-responses" | "openai-completions">`),
  * giving typed model lists to direct factory users. Inside a `Models`
@@ -152,6 +155,9 @@ export interface Provider<TApi extends Api = Api> {
  * Runtime collection of providers plus auth application and stream
  * convenience. Providers own stream behavior; `Models` resolves auth and
  * delegates each request to the provider that owns the model.
+ *
+ * Models 是上层主要调用入口：先按 model.provider 找 Provider，再解析鉴权、合并
+ * 请求配置，最后把请求交给 Provider。它本身不实现任何具体上游线协议。
  */
 export interface Models {
 	getProviders(): readonly Provider[];
@@ -633,6 +639,8 @@ class ModelsImpl implements MutableModels {
 		return provider;
 	}
 
+	// 将 Provider 鉴权结果注入本次请求。顺序是 auth -> model.headers -> options.headers
+	// -> transformHeaders，完成后才把请求交给具体 Provider。
 	private async applyAuth<TOptions extends ProviderRequestOptions & ModelsRequestTransforms>(
 		model: Model<Api>,
 		options: TOptions | undefined,
@@ -664,6 +672,7 @@ class ModelsImpl implements MutableModels {
 		return { requestModel, requestOptions };
 	}
 
+	// 返回流对象本身是同步的；鉴权解析、lazy API 加载和真实请求在流内部异步进行。
 	stream<TApi extends Api>(
 		model: Model<TApi>,
 		context: Context,
@@ -758,6 +767,9 @@ export interface CreateProviderOptions<TApi extends Api = Api> {
  * custom providers both go through this. A single `api` streams all models;
  * an `api` map dispatches on `model.api`, and a model whose api has no entry
  * produces a stream error.
+ *
+ * 这里把模型目录、鉴权和一个或多个 API 实现组装成 Provider。api 传入对象时，
+ * createProvider 会按照 model.api 做运行时分发，因此一个 Provider 可以支持多个 Api。
  */
 export function createProvider<TApi extends Api = Api>(input: CreateProviderOptions<TApi>): Provider<TApi> {
 	const baselineModels = input.models;

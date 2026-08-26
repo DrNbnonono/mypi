@@ -2,7 +2,7 @@
 // Do not edit manually - run 'npm run generate-image-models' to update
 
 import type { ImagesApi, ImagesModel } from "./types.ts";
-
+// 导出图片模型的定义
 export const IMAGE_MODELS = {
 	openrouter: {
 		"black-forest-labs/flux.2-flex": {

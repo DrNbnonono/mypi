@@ -1,3 +1,4 @@
+// 对 agent-loop 的有状态封装
 import type {
 	ImageContent,
 	Message,
@@ -30,12 +31,13 @@ import type {
 
 export type { QueueMode } from "./types.ts";
 
+// Agent 接收的消息类型
 function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
 	return messages.filter(
 		(message) => message.role === "user" || message.role === "assistant" || message.role === "toolResult",
 	);
 }
-
+// 统计量
 const EMPTY_USAGE = {
 	input: 0,
 	output: 0,
@@ -45,6 +47,7 @@ const EMPTY_USAGE = {
 	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
 
+// 默认模型定义
 const DEFAULT_MODEL = {
 	id: "unknown",
 	name: "unknown",
@@ -58,6 +61,7 @@ const DEFAULT_MODEL = {
 	maxTokens: 0,
 } satisfies Model<any>;
 
+// MutableAgentState 类型定义
 type MutableAgentState = Omit<AgentState, "isStreaming" | "streamingMessage" | "pendingToolCalls" | "errorMessage"> & {
 	isStreaming: boolean;
 	streamingMessage?: AgentMessage;
@@ -65,6 +69,7 @@ type MutableAgentState = Omit<AgentState, "isStreaming" | "streamingMessage" | "
 	errorMessage?: string;
 };
 
+// 创建可变的代理状态
 function createMutableAgentState(
 	initialState?: Partial<Omit<AgentState, "pendingToolCalls" | "isStreaming" | "streamingMessage" | "errorMessage">>,
 ): MutableAgentState {

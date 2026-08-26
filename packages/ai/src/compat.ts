@@ -10,6 +10,8 @@
  * ModelManager migration.
  */
 
+// 兼容入口会加载旧的全局 API registry、内置目录和图片入口；它不是轻量的核心入口。
+// 新代码应使用 createModels() + Provider 工厂，只有迁移旧调用方时才使用本模块。
 export * from "./api/anthropic-messages.lazy.ts";
 export * from "./api/azure-openai-responses.lazy.ts";
 export * from "./api/bedrock-converse-stream.lazy.ts";
@@ -68,6 +70,7 @@ export const getModels = getBuiltinModels;
 /** @deprecated Static catalog read. Use `getBuiltinProviders` from "@earendil-works/pi-ai/providers/all" or `Models.getProviders()`. */
 export const getProviders = getBuiltinProviders;
 
+// 导出ApiStreamFunction和ApiStreamSimpleFunction类型
 export type ApiStreamFunction = (
 	model: Model<Api>,
 	context: Context,
@@ -99,6 +102,7 @@ type RegisteredApiProvider = {
 
 const apiProviderRegistry = new Map<string, RegisteredApiProvider>();
 
+// 为 registry 包装流函数，同时校验调用方传入的 model.api。
 function wrapStream<TApi extends Api, TOptions extends StreamOptions>(
 	api: TApi,
 	stream: StreamFunction<TApi, TOptions>,
@@ -123,6 +127,7 @@ function wrapStreamSimple<TApi extends Api>(
 	};
 }
 
+// 注册旧式全局 Api 实现；新式 Provider 注册使用 createProvider() + models.setProvider()。
 export function registerApiProvider<TApi extends Api, TOptions extends StreamOptions>(
 	provider: ApiProvider<TApi, TOptions>,
 	sourceId?: string,

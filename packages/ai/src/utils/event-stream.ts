@@ -1,6 +1,7 @@
 import type { AssistantMessage, AssistantMessageEvent } from "../types.ts";
 
-// Generic event stream class for async iteration
+// 通用异步事件队列：生产者 push，消费者通过 for await 消费，结束时可取得最终结果。
+// 它不负责解析 SSE/NDJSON；上游线协议的解析由各自的 API 适配器负责。
 export class EventStream<T, R = T> implements AsyncIterable<T> {
 	private queue: T[] = [];
 	private waiting: ((value: IteratorResult<T>) => void)[] = [];

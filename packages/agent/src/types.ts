@@ -1,3 +1,4 @@
+//  Agent 世界的“法律/接口定义”
 import type {
 	Api,
 	AssistantMessage,

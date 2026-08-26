@@ -42,6 +42,9 @@ async function forwardStream(
  * Returns a stream synchronously while running async setup (auth resolution,
  * lazy module loading) behind it. Setup failures terminate the stream with an
  * error event.
+ *
+ * 调用方可以立即拿到流对象；鉴权、动态加载 SDK 和实际请求在后台完成。
+ * 因此初始化失败也会被转换为 error 事件，而不是让 stream() 直接抛错。
  */
 export function lazyStream(
 	model: Model<Api>,
@@ -64,6 +67,9 @@ export function lazyStream(
  * Wraps a dynamically imported API implementation module as `ProviderStreams`.
  * The module loads on first stream call; the host's import cache deduplicates
  * loads. Load failures terminate the returned stream with an error event.
+ *
+ * Provider 工厂依赖这个包装器来实现按需加载。它只延迟 API 实现和 SDK，
+ * 不改变 Provider、Model 或统一事件协议。
  */
 export interface LazyApiCapabilities {
 	fetchDeferred?: boolean;

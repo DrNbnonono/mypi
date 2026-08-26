@@ -33,6 +33,9 @@ import type { AssistantMessage } from "../types.ts";
  *   input filling the context window.
  * - DashScope/Qwen: "Range of input length should be [1, X]" (HTTP 400 invalid_parameter_error)
  * - Ollama: Some deployments truncate silently, others return errors like "prompt too long; exceeded max context length by X tokens"
+ *
+ * 本文件主要负责识别溢出结果，供上层决定是否压缩上下文并重试；它本身不会
+ * 对请求参数做通用截断。
  */
 const OVERFLOW_PATTERNS = [
 	/prompt is too long/i, // Anthropic token overflow

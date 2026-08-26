@@ -1,3 +1,4 @@
+// LLM 流式调用抽象
 import type { StreamFn } from "./types.ts";
 
 let defaultStreamFn: StreamFn | undefined;

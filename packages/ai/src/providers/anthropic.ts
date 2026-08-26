@@ -6,6 +6,8 @@ import { ANTHROPIC_API_KEY_ENV, ANTHROPIC_AUTH_TOKEN_ENV, ANTHROPIC_OAUTH_TOKEN_
 import { createProvider, type Provider } from "../models.ts";
 import { ANTHROPIC_MODELS } from "./anthropic.models.ts";
 
+// Anthropic Provider 同时声明 API Key 和 OAuth 两种鉴权方式，但底层请求统一
+// 交给 anthropic-messages API 适配器处理。
 function anthropicApiKeyAuth(): ApiKeyAuth {
 	return {
 		name: "Anthropic API key",

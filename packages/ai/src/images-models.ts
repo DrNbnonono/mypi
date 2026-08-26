@@ -8,7 +8,11 @@ import type { AssistantImages, ImagesApi, ImagesContext, ImagesModel, ImagesOpti
 /**
  * An image-generation provider: the image-side counterpart of `Provider`.
  * Owns id/name metadata, auth, model listing, and generation behavior.
+ *
+ * 图片 Provider 与聊天 Provider 是两套独立运行时。它返回 ImagesModel，
+ * 通过 generateImages() 一次性得到 AssistantImages，不参与聊天事件流。
  */
+// 图片模型提供商
 export interface ImagesProvider {
 	readonly id: string;
 	readonly name: string;
@@ -45,7 +49,11 @@ export interface ImagesProvider {
 /**
  * Runtime collection of image-generation providers plus auth application and
  * generation convenience: the image-side counterpart of `Models`.
+ *
+ * 图片模型不会注册到聊天侧的 Models 集合；调用方应使用 ImagesModels 查询
+ * 模型、解析鉴权和生成图片。
  */
+// 图片模型集合
 export interface ImagesModels {
 	getProviders(): readonly ImagesProvider[];
 	getProvider(id: string): ImagesProvider | undefined;
@@ -86,7 +94,7 @@ export interface ImagesModels {
 		options?: ImagesOptions,
 	): Promise<AssistantImages>;
 }
-
+// 导出图片模型集合接口
 export interface MutableImagesModels extends ImagesModels {
 	/** Upsert/replace by provider.id. Provider ids are unique. */
 	setProvider(provider: ImagesProvider): void;
@@ -94,6 +102,7 @@ export interface MutableImagesModels extends ImagesModels {
 	clearProviders(): void;
 }
 
+// 定义图片模型集合实现
 class ImagesModelsImpl implements MutableImagesModels {
 	private providers = new Map<string, ImagesProvider>();
 	private credentials: CredentialStore;
@@ -145,7 +154,7 @@ class ImagesModelsImpl implements MutableImagesModels {
 		}
 		return models;
 	}
-
+	// 只从当前已知的图片模型目录同步查找，不触发网络刷新。
 	getModel(provider: string, id: string): ImagesModel<ImagesApi> | undefined {
 		return this.getModels(provider).find((model) => model.id === id);
 	}
@@ -224,10 +233,12 @@ class ImagesModelsImpl implements MutableImagesModels {
 	}
 }
 
+// 导出图片模型集合创建函数
 export function createImagesModels(options?: CreateModelsOptions): MutableImagesModels {
 	return new ImagesModelsImpl(options);
 }
 
+// 图片模型提供商创建函数
 export interface CreateImagesProviderOptions {
 	id: string;
 	/** Display name. Default: `id`. */
@@ -248,6 +259,7 @@ export interface CreateImagesProviderOptions {
 }
 
 /** Builds an image-generation provider from parts. */
+// 图片 Provider 工厂：组装图片模型目录、鉴权和 generateImages 实现。
 export function createImagesProvider(input: CreateImagesProviderOptions): ImagesProvider {
 	let models = input.models;
 	let inflightRefresh: Promise<void> | undefined;

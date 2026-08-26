@@ -46,6 +46,10 @@ function withCauseDetail(message: string, cause: unknown): string {
  * A stored credential owns the provider: ambient/env is consulted only when
  * nothing is stored. No silent env fallback after a failed refresh or for a
  * credential type without a matching handler.
+ *
+ * 鉴权解析只负责把凭据转换成请求所需的 apiKey、headers 和 baseUrl；具体模型
+ * 的请求格式仍由 Api 适配器处理。请求级 apiKey 优先于存储凭据，存储凭据
+ * 存在时不会悄悄回退到环境变量。
  */
 export function resolveProviderAuth(
 	provider: { id: string; auth: ProviderAuth },
@@ -123,6 +127,9 @@ const DEFAULT_OAUTH_REFRESH_TIMEOUT_MS = 15_000;
  * OAuth resolution with double-checked locking: tokens with less than five
  * minutes remaining lock, re-check expiry under the lock, refresh once
  * globally, and persist the rotated credential before release.
+ *
+ * OAuth 刷新放在 CredentialStore.modify() 的串行读改写区间内，避免并发请求
+ * 同时刷新并覆盖彼此的新 Token。
  */
 async function resolveStoredOAuth(
 	credentials: CredentialStore,
