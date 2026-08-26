@@ -6,6 +6,7 @@ export { Type } from "typebox";
 // live under "@earendil-works/pi-ai/providers/*", API implementations under
 // "@earendil-works/pi-ai/api/*", the old global API under
 // "@earendil-works/pi-ai/compat".
+// API模块的“只类型”
 export type { AnthropicEffort, AnthropicOptions, AnthropicThinkingDisplay } from "./api/anthropic-messages.ts";
 export type { AzureOpenAIResponsesOptions } from "./api/azure-openai-responses.ts";
 export type { BedrockOptions, BedrockThinkingDisplay } from "./api/bedrock-converse-stream.ts";
@@ -18,6 +19,8 @@ export type { OpenAICodexResponsesOptions, OpenAICodexWebSocketDebugStats } from
 export type { OpenAICompletionsOptions } from "./api/openai-completions.ts";
 export type { OpenAIResponsesOptions } from "./api/openai-responses.ts";
 export type { PiMessagesEvent, PiMessagesOptions, PiMessagesRewriteImpact } from "./api/pi-messages.ts";
+
+// auth 子系统
 export * from "./auth/context.ts";
 export * from "./auth/credential-store.ts";
 export * from "./auth/helpers.ts";

@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
-import type { AuthPrompt, OAuthCredential, Provider } from "./index.ts";
+import type { AuthPrompt, OAuthCredential, Provider } from "./index.ts"; // 导入类型定义
 import { builtinProviders } from "./providers/all.ts";
 
 const AUTH_FILE = "auth.json";
@@ -23,11 +23,12 @@ function loadAuth(): Record<string, OAuthCredential> {
 		return {};
 	}
 }
-
+// 将OAuth凭据保存到auth.json
 function saveAuth(auth: Record<string, OAuthCredential>): void {
 	writeFileSync(AUTH_FILE, JSON.stringify(auth, null, 2), "utf-8");
 }
 
+// 处理OAuth提示，返回用户输入的值
 async function answerPrompt(rl: ReturnType<typeof createInterface>, authPrompt: AuthPrompt): Promise<string> {
 	if (authPrompt.type === "select") {
 		console.log(`\n${authPrompt.message}`);
@@ -42,6 +43,7 @@ async function answerPrompt(rl: ReturnType<typeof createInterface>, authPrompt: 
 	return prompt(rl, `${authPrompt.message}${authPrompt.placeholder ? ` (${authPrompt.placeholder})` : ""}: `);
 }
 
+// 登录到指定的OAuth提供商，并保存凭据到auth.json
 async function login(providerId: string): Promise<void> {
 	const provider = PROVIDERS.find((entry) => entry.id === providerId);
 	if (!provider) throw new Error(`Unknown provider: ${providerId}`);
@@ -76,6 +78,7 @@ async function login(providerId: string): Promise<void> {
 	}
 }
 
+// 接受命令行参数，执行相应的操作
 async function main(): Promise<void> {
 	const args = process.argv.slice(2);
 	const command = args[0];

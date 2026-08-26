@@ -104,9 +104,10 @@ export interface ThinkingBudgets {
 	high?: number;
 }
 
-// Base options all providers share
+// Base options all providers share 不同模型提供商基本的共享选项
 export type CacheRetention = "none" | "short" | "long";
 
+// 协议转换
 export type Transport = "sse" | "websocket" | "websocket-cached" | "auto";
 
 /** Provider-scoped environment overrides. Values take precedence over process.env. */
@@ -268,6 +269,7 @@ export type ApiStreamOptions<TApi extends Api> = TApi extends keyof ApiOptionsMa
  * factories pass these around as values. This is the untyped dispatch shape;
  * per-API option typing lives on the implementation modules themselves and on
  * `Provider.stream()` via `ApiStreamOptions`.
+ * 这里的是API实现模块的统一流契约：每个位于`src/api/`下的模块都导出`stream`和`streamSimple`；有能力的模块也可以导出延迟响应方法。延迟包装器(`lazyApi()`)和提供程序工厂将这些作为值传递。这是未类型化的调度形状；每个API的选项类型化存在于实现模块本身以及通过`ApiStreamOptions`在`Provider.stream()`上。
  */
 export interface ProviderStreams {
 	stream(model: Model<Api>, context: Context, options?: StreamOptions): AssistantMessageEventStream;
@@ -285,6 +287,7 @@ export interface ProviderStreams {
  * every image API module under `src/api/` exports exactly `generateImages`,
  * so the module itself satisfies this interface. Lazy wrappers and image
  * provider factories pass these around as values.
+ * 这是图像生成API实现模块的统一契约：每个位于`src/api/`下的图像API模块都精确地导出`generateImages`，因此模块本身满足此接口。延迟包装器和图像提供程序工厂将这些作为值传递。
  */
 export interface ProviderImages {
 	generateImages(
@@ -329,12 +332,18 @@ export interface SimpleStreamOptions extends StreamOptions {
 //   returned stream, not thrown.
 // - Error termination must produce an AssistantMessage with stopReason
 //   "error" or "aborted" and errorMessage, emitted via the stream protocol.
+// 流函数的通用接口，带有类型化选项。
+// 合同：
+// - 必须返回一个AssistantMessageEventStream。
+// - 一旦调用，请求/模型/运行时失败应编码在返回的流中，而不是抛出。
+// - 错误终止必须生成一个AssistantMessage，stopReason为"error"或"aborted"，并带有errorMessage，通过流协议发出。
 export type StreamFunction<TApi extends Api = Api, TOptions extends StreamOptions = StreamOptions> = (
 	model: Model<TApi>,
 	context: Context,
 	options?: TOptions,
 ) => AssistantMessageEventStream;
 
+// 图片生成函数的通用接口，带有类型化选项。
 export type ImagesFunction<TApi extends ImagesApi = ImagesApi, TOptions extends ImagesOptions = ImagesOptions> = (
 	model: ImagesModel<TApi>,
 	context: ImagesContext,
@@ -347,12 +356,14 @@ export interface TextSignatureV1 {
 	phase?: "commentary" | "final_answer";
 }
 
+// 文本内容接口
 export interface TextContent {
 	type: "text";
 	text: string;
 	textSignature?: string; // e.g., for OpenAI responses, message metadata (legacy id string or TextSignatureV1 JSON)
 }
 
+// 思考内容接口
 export interface ThinkingContent {
 	type: "thinking";
 	thinking: string;
@@ -363,12 +374,14 @@ export interface ThinkingContent {
 	redacted?: boolean;
 }
 
+// 图片内容接口
 export interface ImageContent {
 	type: "image";
 	data: string; // base64 encoded image data
 	mimeType: string; // e.g., "image/jpeg", "image/png"
 }
 
+// 工具调用接口
 export interface ToolCall {
 	type: "toolCall";
 	id: string;
@@ -378,7 +391,7 @@ export interface ToolCall {
 	/** OpenAI Responses namespace for calls to dynamically loaded or namespaced tools. */
 	namespace?: string;
 }
-
+// 工具调用结果
 export interface Usage {
 	input: number;
 	output: number;
@@ -402,10 +415,13 @@ export interface Usage {
 	};
 }
 
+// 停止原因类型
 export type StopReason = "pending" | "stop" | "length" | "toolUse" | "error" | "aborted" | "deferred";
 
+// JSON 值类型
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
+// 延迟处理接口
 export interface DeferredHandle {
 	provider: string;
 	modelId: string;
@@ -418,12 +434,14 @@ export interface DeferredHandle {
 	data?: JsonValue;
 }
 
+// 用户消息接口
 export interface UserMessage {
 	role: "user";
 	content: string | (TextContent | ImageContent)[];
 	timestamp: number; // Unix timestamp in milliseconds
 }
 
+// 助手消息接口
 export interface AssistantMessage {
 	role: "assistant";
 	content: (TextContent | ThinkingContent | ToolCall)[];
@@ -446,6 +464,7 @@ export interface AssistantMessage {
 	timestamp: number; // Unix timestamp in milliseconds
 }
 
+// 工具结果消息接口
 export interface ToolResultMessage<TDetails = any> {
 	role: "toolResult";
 	toolCallId: string;
@@ -472,7 +491,7 @@ export type ImagesOutputContent = TextContent | ImageContent;
 export interface ImagesContext {
 	input: ImagesInputContent[];
 }
-
+// 图像生成停止原因类型
 export type ImagesStopReason = "stop" | "error" | "aborted";
 
 export interface AssistantImages {
@@ -518,6 +537,7 @@ export interface Tool<TParameters extends TSchema = TSchema> {
 	constrainedSampling?: false | ConstrainedSamplingConfig;
 }
 
+// 上下文接口
 export interface Context {
 	systemPrompt?: string;
 	messages: Message[];
@@ -532,6 +552,7 @@ export interface Context {
  * - `error` carrying the final AssistantMessage with stopReason "error" or "aborted"
  *   and errorMessage.
  */
+// 助手消息事件类型
 export type AssistantMessageEvent =
 	| { type: "start"; partial: AssistantMessage }
 	| { type: "text_start"; contentIndex: number; partial: AssistantMessage }
@@ -554,6 +575,7 @@ export type AssistantMessageEvent =
  * Compatibility settings for OpenAI-compatible completions APIs.
  * Use this to override URL-based auto-detection for custom providers.
  */
+// OpenAI 兼容 completions API 的兼容性设置。使用此选项覆盖自定义提供程序的基于 URL 的自动检测。
 export interface OpenAICompletionsCompat {
 	/** Whether the provider supports the `store` field. Default: auto-detected from URL. */
 	supportsStore?: boolean;
@@ -625,6 +647,7 @@ export interface OpenAICompletionsCompat {
 }
 
 /** Compatibility settings for OpenAI Responses APIs. */
+// OpenAI Responses API 的兼容性设置。
 export interface OpenAIResponsesCompat {
 	/** Whether the provider supports the `developer` role (vs `system`). Default: true. */
 	supportsDeveloperRole?: boolean;
@@ -645,6 +668,7 @@ export interface OpenAIResponsesCompat {
 }
 
 /** Compatibility settings for Anthropic Messages-compatible APIs. */
+// Anthropic Messages 兼容 API 的兼容性设置。
 export interface AnthropicMessagesCompat {
 	/**
 	 * Whether the provider accepts per-tool `eager_input_streaming`.
@@ -708,6 +732,7 @@ export interface AnthropicMessagesCompat {
 }
 
 /** Compatibility settings for Amazon Bedrock models. */
+// Amazon Bedrock 模型的兼容性设置。
 export interface BedrockCompat {
 	/** Whether the model supports Bedrock strict tool schemas. Default: false. */
 	supportsStrictMode?: boolean;
@@ -719,6 +744,7 @@ export interface BedrockCompat {
  * Sent as the `provider` field in the OpenRouter API request body.
  * @see https://openrouter.ai/docs/guides/routing/provider-selection
  */
+// OpenRouter 提供程序路由首选项。控制 OpenRouter 将请求路由到哪些上游提供程序。作为 OpenRouter API 请求正文中的 `provider` 字段发送。
 export interface OpenRouterRouting {
 	/** Whether to allow backup providers to serve requests. Default: true. */
 	allow_fallbacks?: boolean;
@@ -793,6 +819,7 @@ export interface OpenRouterRouting {
  * Controls which upstream providers the gateway routes requests to.
  * @see https://vercel.com/docs/ai-gateway/models-and-providers/provider-options
  */
+// Vercel AI Gateway 路由首选项。控制网关将请求路由到哪些上游提供程序。
 export interface VercelGatewayRouting {
 	/** List of provider slugs to exclusively use for this request (e.g., ["bedrock", "anthropic"]). */
 	only?: string[];
