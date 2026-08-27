@@ -1,4 +1,5 @@
-// Core TUI interfaces and classes
+// TUI 只处理终端输入、布局、差分渲染和组件组合；它消费上层传入的状态，不决定
+// Agent Loop、模型调用或 Session 持久化。coding-agent 的 InteractiveMode 是两者的连接层。
 
 export { Marked, type Token, type Tokens } from "marked";
 // Autocomplete support

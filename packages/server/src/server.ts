@@ -36,6 +36,8 @@ const DEFAULT_HANDSHAKE_TIMEOUT_MS = 5_000;
 const MAX_UINT32 = 0xffff_ffff;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
+// PiServer 管理监听器、连接握手和协议错误；Session 的创建、执行与生命周期
+// 委托给 LiveSessionManager，避免网络层直接耦合具体 AgentSession 实现。
 export class PiServer {
 	readonly id: string;
 
@@ -110,6 +112,8 @@ export class PiServer {
 	}
 
 	accept(connection: ByteConnection): ByteConnectionHandler {
+		// 每个 ByteConnection 都绑定独立的 decoder、握手计时器和 sessionIds；连接
+		// 关闭时这些资源会一起清理，不能复用另一条连接的协议状态。
 		if (this.closing) {
 			void this.closeConnection(connection);
 			return {
@@ -250,6 +254,8 @@ export class PiServer {
 	}
 
 	private async handleRequest(state: ConnectionState, envelope: RequestEnvelope): Promise<void> {
+		// 请求处理不直接暴露异常：Session manager 的业务错误和未知错误都转换成
+		// 稳定的 ProtocolError，再通过同一个 request id 返回客户端。
 		try {
 			const result = await this.sessions.executeCommand(state, envelope.request);
 			await this.sendMessage(state, {

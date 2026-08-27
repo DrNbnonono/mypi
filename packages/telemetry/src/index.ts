@@ -1,3 +1,5 @@
+// telemetry 提供厂商无关的 span/context 抽象和基于 schema 的类型推导；它只记录
+// 观测信息，不应改变 Agent、网络连接或 Session 操作的业务结果。
 export type AttributeValue = string | number | boolean | readonly string[] | readonly number[] | readonly boolean[];
 
 export interface SpanAttributes {
@@ -70,6 +72,8 @@ export interface TelemetrySchemaDefinition {
 
 /** Typed identity helper for serializable telemetry schema data. */
 export function defineTelemetrySchema<const T extends TelemetrySchemaDefinition>(schema: T): T {
+	// 该函数故意只保留字面量类型，让 schema 同时成为运行时描述和编译期推导来源；
+	// 它不执行运行时校验，真正的 span backend 仍由 TelemetryContext 决定。
 	return schema;
 }
 
@@ -350,6 +354,8 @@ export function createTypedSpanStarter<const Schemas extends TelemetrySchemaTupl
 	telemetryContext: TelemetryContext,
 	_schemas: Schemas & UniqueTelemetrySchemas<Schemas>,
 ): TypedSpanStarter<Schemas> {
+	// _schemas 只参与类型推导和重复 span 名称检查，调用时实际使用的是传入的
+	// telemetryContext；返回的 starter 会把 child span 自动绑定到当前父 span。
 	return bindTypedSpanStarter<Schemas>(telemetryContext);
 }
 

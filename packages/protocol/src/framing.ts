@@ -1,3 +1,5 @@
+// Frame 层只解决字节流分包：每个 payload 前放置 4 字节无符号大端长度。
+// CBOR 语义和 Client/Server 消息校验由上层 codec 处理。
 const FRAME_HEADER_LENGTH = 4;
 const MAX_UINT32 = 0xffff_ffff;
 const PAYLOAD_BLOCK_SIZE = 64 * 1024;
@@ -26,6 +28,8 @@ function resolveMaxFrameLength(options: FrameDecoderOptions | undefined): number
 
 /** Prefixes a payload with its unsigned 32-bit big-endian byte length. */
 export function encodeFrame(payload: Uint8Array): Uint8Array {
+	// encodeFrame 只添加长度头，不复制或解释 payload 的内容；调用方应在这里
+	// 传入已经完成 CBOR 编码并通过大小限制的字节序列。
 	if (!(payload instanceof Uint8Array)) throw new TypeError("Frame payload must be a Uint8Array");
 	if (payload.byteLength > MAX_UINT32) throw new RangeError("Frame payload exceeds the unsigned 32-bit length limit");
 	const frame = new Uint8Array(FRAME_HEADER_LENGTH + payload.byteLength);
@@ -67,10 +71,14 @@ export class FrameDecoder {
 	private state: DecoderState = "open";
 
 	constructor(options?: FrameDecoderOptions) {
+		// maxFrameLength 是协议边界上的资源保护，既防止恶意长度头触发大分配，
+		// 也保证 Client/Server 对单帧大小有相同预期。
 		this.maxFrameLength = resolveMaxFrameLength(options);
 	}
 
 	push(chunk: Uint8Array): Uint8Array[] {
+		// chunk 可以只包含半个 header、半个 payload，也可以包含多个 frame；返回
+		// 的数组只包含已经完整组装的 payload，未完成部分保存在 decoder 内部。
 		if (this.state === "ended") throw new FrameError("Frame decoder has ended");
 		if (this.state === "failed") throw new FrameError("Frame decoder has failed");
 		if (!(chunk instanceof Uint8Array)) throw new TypeError("Frame chunk must be a Uint8Array");

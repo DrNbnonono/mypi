@@ -25,6 +25,8 @@ import {
 } from "vitest-evals/harness";
 import { PI_SESSION_SNAPSHOT_ARTIFACT } from "./vitest-evals/artifacts.ts";
 
+// evals 使用可控的 Harness/Provider 组合验证运行时契约，重点是可重复的状态、事件
+// 和持久化结果，而不是调用真实 Provider 或消耗付费 Token。
 export type PiCodingAgentInput = string | Array<{ type: "prompt"; content: string } | { type: "reload" }>;
 
 type PiCodingAgentModelSelection = {
@@ -47,6 +49,8 @@ export function resolveModelSelection(
 	explicitModel: PiCodingAgentModelSelection | undefined,
 	environment: { PI_PROVIDER?: string; PI_MODEL?: string } = process.env,
 ): PiCodingAgentModelSelection {
+	// 评测必须固定 Provider 和 model，不能隐式跟随当前机器的默认模型；显式参数
+	// 优先，其次读取评测环境变量，缺失任一项就立即失败。
 	const provider = (explicitModel?.provider ?? environment.PI_PROVIDER)?.trim();
 	const id = (explicitModel?.id ?? environment.PI_MODEL)?.trim();
 	if (!provider || !id) {
@@ -112,6 +116,8 @@ async function runPiCodingAgent<TOutput extends JsonValue>(
 	setArtifact: HarnessContext["setArtifact"],
 	options: PiCodingAgentHarnessOptions | PiCodingAgentHarnessWithOutput<TOutput>,
 ): Promise<SimpleHarnessResult<string | TOutput>> {
+	// 每次评测都创建隔离的临时 cwd、agentDir 和 Session，保证前一个 case 的文件、
+	// 设置、扩展或对话不会污染下一个 case；finally 负责释放 runtime 和临时目录。
 	const startedAt = performance.now();
 	signal?.throwIfAborted();
 	const selection = resolveModelSelection(options.model);
@@ -250,6 +256,8 @@ export function createPiCodingAgentHarness(options?: PiCodingAgentHarnessOptions
 export function createPiCodingAgentHarness<TOutput extends JsonValue>(
 	options: PiCodingAgentHarnessOptions | PiCodingAgentHarnessWithOutput<TOutput> = {},
 ) {
+	// 返回 vitest-evals 所需的 Harness 适配器：评测框架负责调度 input，内部运行
+	// 负责创建真实 coding-agent 组合并把 Session snapshot 作为 artifact 保存。
 	return createHarness<PiCodingAgentInput, string | TOutput>({
 		name: options.name ?? "pi-coding-agent",
 		run: ({ input, signal, setArtifact }) => runPiCodingAgent(input, signal, setArtifact, options),

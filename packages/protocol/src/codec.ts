@@ -15,6 +15,8 @@ import {
 	ServerMessageSchema,
 } from "./schemas.ts";
 
+// Codec 的顺序是“值校验 -> CBOR 编码 -> 长度帧”；解码则反向执行，并在每个
+// 完整 frame 上再次校验 schema。这样网络输入不会直接进入业务层。
 export class ProtocolValidationError extends Error {
 	constructor(message: string, _value?: unknown) {
 		super(message);
@@ -77,6 +79,8 @@ function encodeProtocolMessage<T>(
 
 /** Validates and encodes one complete length-prefixed client message. */
 export function encodeClientMessage(message: ClientMessage, options?: FrameDecoderOptions): Uint8Array {
+	// options.maxFrameLength 同时传给 CBOR 和 frame 层，避免编码阶段通过一层
+	// 校验、却在另一层超出限制。
 	return encodeProtocolMessage(message, parseClientMessage, "client", options);
 }
 
@@ -100,6 +104,8 @@ class ValidatedMessageDecoder<T> {
 	}
 
 	push(chunk: Uint8Array): T[] {
+		// 先由 FrameDecoder 组帧，再对每个 payload 做 CBOR 解码和 schema 校验；任一
+		// 消息失败都会锁定 decoder，调用方必须重新建立连接而不能继续消费脏状态。
 		if (this.failed) throw new ProtocolValidationError(`${this.kind} message decoder has failed`);
 		try {
 			const messages: T[] = [];

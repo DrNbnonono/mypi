@@ -1,3 +1,5 @@
+// Web UI 的 agent-client 是浏览器到 Server API 的轻量适配层：负责发送命令、读取
+// Session/Agent 状态，不在浏览器中重新实现 Agent Loop。
 // Client-side helper for POST /api/agent/[id].
 //
 // Every /api/agent/[id] route returns one of:
@@ -20,7 +22,9 @@ export class AgentCommandError extends Error {
 }
 
 export function isPromptRejectedError(error: unknown): error is AgentCommandError {
-  return error instanceof AgentCommandError
+	// 只有服务端明确返回“未接受”时才恢复编辑器草稿；网络失败可能已经提交成功，
+	// 不能把不确定状态当作拒绝处理，否则用户重试会产生重复 prompt。
+	return error instanceof AgentCommandError
     && error.code === "prompt_rejected"
     && error.accepted === false;
 }
@@ -29,7 +33,9 @@ export async function sendAgentCommand<T = unknown>(
   sessionId: string,
   command: Record<string, unknown>,
 ): Promise<T> {
-  const res = await fetch(`/api/agent/${encodeURIComponent(sessionId)}`, {
+	// command 是浏览器到服务端的业务边界；统一在这里编码 sessionId、解析 envelope
+	// 和转换错误，调用方只处理成功 data 或 AgentCommandError。
+	const res = await fetch(`/api/agent/${encodeURIComponent(sessionId)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(command),

@@ -35,6 +35,8 @@ function toMetadata(snapshot: SessionSnapshot): SessionMetadata {
 	};
 }
 
+// LiveSessionManager 把一个持久化/运行时 Session 提升为可被多个连接观察的 live
+// 对象，并负责 attach、并发 operation、快照广播以及无连接后的释放。
 export class LiveSessionManager {
 	private readonly options: LiveSessionManagerOptions;
 	private readonly liveSessions = new Map<string, LiveSession>();
@@ -45,6 +47,8 @@ export class LiveSessionManager {
 	}
 
 	async executeCommand(connection: ConnectionState, command: Command) {
+		// command 路由的第一步是确认连接与 Session 的关系；除 list/create/attach 外，
+		// 所有操作都必须经过 requireAttached，避免一个客户端操作未持有的 Session。
 		switch (command.command) {
 			case "list":
 				return { command: "list" as const, sessions: await this.listMetadata() };
@@ -173,6 +177,8 @@ export class LiveSessionManager {
 		live: LiveSession,
 		operation: () => Promise<void>,
 	): Promise<SessionSnapshot> {
+		// operationCount 是释放保护：即使连接在 operation 期间断开，runtime 也要等
+		// 当前操作结束后才允许 maybeDispose 检查是否可以销毁。
 		live.operationCount += 1;
 		try {
 			await operation();
@@ -184,6 +190,8 @@ export class LiveSessionManager {
 	}
 
 	private async acquire(id: string, acquireRuntime: () => Promise<PiSessionRuntime>): Promise<LiveSession> {
+		// liveSessions 处理已打开实例，openingSessions 合并并发打开请求；disposing
+		// 的实例必须等清理完成后重新尝试，不能复用半关闭 runtime。
 		for (;;) {
 			const existing = this.liveSessions.get(id);
 			if (existing) {

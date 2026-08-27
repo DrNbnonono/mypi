@@ -48,6 +48,8 @@ interface PendingRequest {
 	reject(error: Error): void;
 }
 
+// PiClient 是客户端侧的状态编排器：Connection 负责字节传输，ClientState 负责
+// 快照/事件，PiClient 负责请求匹配、Session lease 和断线后的资源失效。
 export class PiClient {
 	readonly #options: PiClientOptions;
 	readonly #connection: Connection;
@@ -149,6 +151,8 @@ export class PiClient {
 	}
 
 	async acquireSession(sessionId: string, options: AcquireSessionOptions): Promise<PiSessionHandle> {
+		// 先在本地预留 lease，再协调上一次 detach/cleanup，最后发送 attach；这样同一
+		// Session 的 shared/exclusive 规则在请求发出前就能被拒绝，减少竞态窗口。
 		this.#assertNotDisposed();
 		const token = this.#reserveSessionLease(sessionId, options.mode);
 		try {
@@ -187,6 +191,8 @@ export class PiClient {
 	}
 
 	#request<const TCommand extends Command>(command: TCommand): Promise<ResultForCommand<TCommand>> {
+		// pendingRequests 以 request id 关联协议 response；断线时统一 reject，避免
+		// 调用方永远等待一个已经不可能到达的结果。
 		if (this.#disposed) return Promise.reject(new PiClientDisposedError());
 		if (!this.connected) return Promise.reject(new PiDisconnectedError());
 		const id = `request-${++this.#requestSequence}`;
@@ -207,6 +213,8 @@ export class PiClient {
 	}
 
 	#createSessionLease(sessionId: string, token: SessionLeaseToken): PiSessionHandle {
+		// 返回的 handle 不是裸 session 引用，而是带 generation 检查的 lease。断线、
+		// session_removed 或新一轮清理会使旧 handle 失效，防止释放旧资源时误伤新连接。
 		const generation = this.#sessionLeaseGenerations.get(sessionId) ?? 0;
 		this.#sessionLeaseGenerations.set(sessionId, generation);
 		let state: SessionLeaseState = "active";

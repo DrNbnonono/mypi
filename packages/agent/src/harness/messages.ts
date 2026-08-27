@@ -122,6 +122,8 @@ export function createCustomMessage(
 }
 
 export function convertToLlm(messages: AgentMessage[]): Message[] {
+	// 持久化消息可以比 LLM 支持的角色更多；这里将 bash/summary/custom 投影为 user
+	// 文本，并过滤明确排除的消息，保证模型上下文不会暴露内部存储结构。
 	return messages
 		.map((m): Message | undefined => {
 			switch (m.role) {

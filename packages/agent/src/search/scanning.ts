@@ -92,6 +92,8 @@ export async function* scanningEntries<TMetadata extends SessionMetadata>(
 	readable: ScanningReadable<TMetadata>,
 	options: ScanningReadableOptions<TMetadata> = {},
 ): AsyncIterable<SessionSearchCandidate> {
+	// 扫描器先按分页读取 Entry，再把 Entry 投影为可搜索文本；它不改变 Session，
+	// 也不要求后端提供全文索引，因此可作为 SQLite 之外的通用 fallback。
 	yield* scanReadableEntries(readable, await readable.getMetadata(), options);
 }
 
@@ -140,6 +142,8 @@ export function createScanningSessionSearch<
 	source: readonly ScanningReadable<TMetadata>[] | ScanningReadableSource<TMetadata, TSourceOptions>,
 	options: ScanningSessionSearchOptions<TMetadata, TSourceOptions, THit> = {},
 ): SessionSearch<THit> {
+	// source 可以是静态 Session 列表，也可以按查询动态产生列表；search 内部统一
+	// 做大小写归一、entry type 过滤、取消检查和 limit 截断。
 	const createHit =
 		options.createHit ??
 		((metadata: TMetadata, candidate: SessionSearchCandidate) =>

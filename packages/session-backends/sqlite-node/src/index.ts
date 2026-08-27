@@ -75,6 +75,8 @@ class NodeSqliteDatabase implements SqliteDatabase {
 	}
 
 	transaction<T>(fn: () => T): T {
+		// Agent 的 Session mutation 必须是同步、原子的数据库操作；BEGIN IMMEDIATE
+		// 先取得写锁，成功提交，失败回滚，异步 callback 会被拒绝以免事务悬挂。
 		sql`BEGIN IMMEDIATE`.exec(this);
 		try {
 			const result = fn();
@@ -99,10 +101,13 @@ class NodeSqliteDatabase implements SqliteDatabase {
 }
 
 export function wrapNodeSqliteDatabase(db: DatabaseSync): SqliteDatabase {
+	// 将 node:sqlite 的 DatabaseSync 隔离在适配器内，其他 backend 代码只依赖
+	// SqliteDatabase 接口，从而可以在测试中替换为内存或模拟实现。
 	return new NodeSqliteDatabase(db);
 }
 
 export function createNodeSqliteFactory(): SqliteDatabaseFactory {
+	// 工厂延迟到 open(path) 才打开数据库，便于 SessionRepo 控制生命周期和路径。
 	return {
 		async open(path: string): Promise<SqliteDatabase> {
 			return new NodeSqliteDatabase(new DatabaseSync(path));
@@ -110,5 +115,7 @@ export function createNodeSqliteFactory(): SqliteDatabaseFactory {
 	};
 }
 
+// sqlite-node 负责把 agent 的 SessionStorage/SessionRepo 映射到 Node SQLite；Entry、
+// Record、lane、branch、事实和搜索索引都在这里落盘，上层仍通过抽象接口访问。
 // Re-export the SQLite session backend and types so this package is a complete node-sqlite backend.
 export * from "./sqlite/index.ts";

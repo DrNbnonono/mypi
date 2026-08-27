@@ -95,6 +95,8 @@ export class SessionState {
 	}
 
 	applyMutation(mutation: SessionMutation, invalid: InvalidMutation = invalidMutation): void {
+		// SessionState 用单调 seq、唯一 id 和 parent/leaf 链保证会话树一致；mutation
+		// 一旦违反这些约束就拒绝应用，避免内存状态与 durable log 分叉。
 		const seq =
 			mutation.kind === "entry"
 				? mutation.entry.seq

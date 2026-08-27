@@ -25,6 +25,8 @@ import type {
 import type { TelemetryContext } from "./telemetry.ts";
 import type { AgentHarnessResources, PromptTemplate, Skill } from "./types.ts";
 
+// Harness 的错误按操作边界使用稳定标签区分“不可接受的请求”和“运行失败”；
+// 这些错误会被上层包装进 Result，便于 UI 和恢复逻辑按 code 分支处理。
 export class LaneBusy extends TaggedError("LaneBusy")<{
 	lane: string;
 	operationId: string;
@@ -303,6 +305,8 @@ export interface AgentLane {
 }
 
 export class AgentHarness implements AgentLane {
+	// AgentHarness 的公共接口已经描述了完整的 lane 能力，但当前文件中的实现
+	// 主要先完成状态、配置和 session 连接；阅读行为时要区分“类型已声明”和“代码已驱动”。
 	readonly name = "main";
 	readonly session: SessionTree;
 	readonly hooks: Hooks;
@@ -347,6 +351,8 @@ export class AgentHarness implements AgentLane {
 	static async create(
 		options: AgentHarnessOptions,
 	): Promise<{ harness: AgentHarness; suspended: SuspendedOperation[] }> {
+		// 恢复已有 operation 的流程尚未实现；一旦发现 durable record，这里会明确
+		// 抛出而不是伪造一个可继续运行的 harness。
 		const [record] = await options.session.findRecords({ limit: 1 });
 		if (record !== undefined) throw new HarnessNotImplemented("create.restore");
 		return { harness: new AgentHarness(options), suspended: [] };

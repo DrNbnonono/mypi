@@ -1,4 +1,6 @@
-// Core session management
+// coding-agent 是最终面向用户的应用宿主：把 pi-ai 的模型能力、pi-agent-core 的
+// Loop、Session/Extension/Tool 和 TUI/Print/RPC 运行模式组装成可执行的 pi CLI。
+// 本入口主要负责公开 SDK 和 CLI 所需的组合层能力，不承载具体模型协议。
 
 export { type Args, parseArgs } from "./cli/args.ts";
 

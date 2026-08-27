@@ -116,6 +116,8 @@ function buildProxyRequestOptions(options: ProxyStreamOptions): ProxySerializabl
 }
 
 export function streamProxy(model: Model<any>, context: Context, options: ProxyStreamOptions): ProxyMessageEventStream {
+	// Proxy 保持与本地 StreamFn 相同的事件语义，只把 model/context/options 序列化到
+	// 服务端；服务端负责 Provider 鉴权，本地仅重建 partial assistant message。
 	const stream = new ProxyMessageEventStream();
 
 	(async () => {

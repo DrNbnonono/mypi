@@ -26,6 +26,8 @@ import {
 	serializeConversation,
 } from "./utils.ts";
 
+// Compaction 分成“确定压缩边界”“调用模型生成摘要”“返回可持久化结果”三步；
+// 本模块负责计算和生成，不直接决定何时写入 session，由上层 operation 驱动。
 /** File-operation details stored on generated compaction entries. */
 export interface CompactionDetails {
 	/** Files read in the compacted history. */
@@ -214,6 +216,8 @@ function getLastAssistantUsageInfo(messages: AgentMessage[]): { usage: Usage; in
 
 /** Estimate context tokens for messages using provider usage when available. */
 export function estimateContextTokens(messages: AgentMessage[]): ContextUsageEstimate {
+	// 优先采用最近一次 assistant usage，再对其后的消息做估算；这样既利用供应商
+	// 的真实计数，也能覆盖 usage 之后新追加的 steering/toolResult 等消息。
 	const usageInfo = getLastAssistantUsageInfo(messages);
 
 	if (!usageInfo) {
@@ -377,6 +381,8 @@ export function findCutPoint(
 	endIndex: number,
 	keepRecentTokens: number,
 ): CutPointResult {
+	// 只能在安全边界切分历史；如果切点落在一个未完成 turn 中，还要把该 turn
+	// 的前缀单独摘要，避免保留的后缀失去用户请求或工具背景。
 	const cutPoints = findValidCutPoints(entries, startIndex, endIndex);
 
 	if (cutPoints.length === 0) {
@@ -538,6 +544,8 @@ export async function generateSummaryWithUsage(
 	retry?: RetryPolicy,
 	callbacks?: RetryCallbacks,
 ): Promise<Result<{ text: string; usage: Usage }, CompactionError>> {
+	// 摘要是独立的模型请求：先把 AgentMessage 转成模型消息并序列化，再使用独立
+	// sessionId 且关闭 cacheRetention，避免摘要请求污染主对话缓存链路。
 	const maxTokens = Math.min(
 		Math.floor(0.8 * reserveTokens),
 		model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY,
@@ -617,6 +625,8 @@ export function prepareCompaction(
 	pathEntries: Entry[],
 	settings: CompactionSettings,
 ): Result<CompactionPreparation | undefined, CompactionError> {
+	// preparation 阶段只做确定性的边界、摘要输入、保留尾部和文件操作收集，不调用
+	// LLM；这样上层可以先检查结果，再决定是否发起昂贵的摘要请求。
 	if (pathEntries.length === 0 || pathEntries[pathEntries.length - 1].type === "compaction") {
 		return ok(undefined);
 	}
@@ -714,6 +724,8 @@ export async function compact(
 	retry?: RetryPolicy,
 	callbacks?: RetryCallbacks,
 ): Promise<Result<CompactResult, CompactionError>> {
+	// 普通压缩摘要历史；跨 turn 切分时还会为当前 turn 前缀生成单独摘要，最后把
+	// retainedTail 和文件读写详情一起交给 session 层持久化。
 	const {
 		messagesToSummarize,
 		turnPrefixMessages,

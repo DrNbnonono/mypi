@@ -310,6 +310,8 @@ function validateOperationResult(entriesById: ReadonlyMap<string, Entry>, record
 
 /** Validates a bounded lane recovery slice without reading or mutating session state. */
 export function validateRecordLog(input: RecordLogSlice): void {
+	// 恢复前先验证一个有限的 lane 日志切片：所有 record 的引用、序号、工具调用和
+	// operation 生命周期都必须自洽；该函数只读输入，不尝试修复损坏日志。
 	if (input.openOperations.length > 1) {
 		corrupt("multiple_open_operations", `Lane ${input.lane} has at least two open operations`);
 	}
@@ -504,6 +506,8 @@ function deriveToolBatch(
 
 /** Purely reconstructs one lane's orchestration state from its bounded recovery inputs. */
 export function reduceLaneState(input: LaneReductionInput): LaneReductionResult {
+	// reducer 是纯投影：把 storage 读出的 entries/records 转成当前 lane 的有效状态。
+	// 同一份输入应得到同一结果，真正的写入和恢复动作由 Harness operation 负责。
 	validateRecordLog(input);
 
 	const records = bySequence(input.records);

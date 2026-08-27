@@ -4,6 +4,8 @@ import {
   type AgentEventLike,
 } from "./agent-event-wire";
 
+// 浏览器事件流把服务端推送的 Agent 进度规范化为可消费的异步事件；断线重连和
+// 快照补齐优先于“只追加文本”，以免 UI 状态落后于服务端 Session。
 export interface AgentEventStreamSession {
   readonly isStreaming: boolean;
   readonly streamingMessage: unknown;
@@ -25,7 +27,9 @@ export function createAgentEventStream(
   sessionId: string,
   sessionPromise: Promise<AgentEventStreamSession>,
 ): ReadableStream<Uint8Array> {
-  let cancelStream: (closeController: boolean) => void = () => {};
+	// sessionPromise 表示服务端 runtime 的异步准备过程；SSE 必须先安装 listener，
+	// 再发送 snapshot，才能覆盖“连接建立时已经产生事件”的竞态。
+	let cancelStream: (closeController: boolean) => void = () => {};
 
   return new ReadableStream<Uint8Array>({
     start(controller) {

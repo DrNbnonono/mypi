@@ -21,6 +21,8 @@ import type {
 } from "./types.ts";
 import { SessionError } from "./types.ts";
 
+// Session 只定义与存储实现无关的会话树操作；JSONL、SQLite 或其他后端都通过
+// SessionStorage 接入，Agent 上层不需要知道具体落盘格式。
 type JsonValidationFrame = { value: unknown } | { exit: object };
 
 function invalidPayload(reason: string): never {
@@ -40,6 +42,8 @@ function assertValidCursor(afterSeq: number | undefined): void {
 }
 
 export function assertJsonSerializable(value: unknown): void {
+	// durable entry/record 会被长期保存和恢复，因此这里主动拒绝循环、访问器、
+	// 稀疏数组、非普通对象和非有限数字，避免 JSON.stringify 静默丢失语义。
 	const active = new WeakSet<object>();
 	const stack: JsonValidationFrame[] = [{ value }];
 	while (stack.length > 0) {
@@ -100,6 +104,8 @@ export function assertJsonSerializable(value: unknown): void {
 }
 
 export class Session<TMetadata extends SessionMetadata = SessionMetadata> implements SessionTree {
+	// Session 是 storage 的薄适配层；非 main lane 通过 view 暴露同一棵树的分支视图，
+	// 不复制会话数据，也不为每个 lane 创建独立存储。
 	private readonly storage: SessionStorage<TMetadata>;
 	readonly idGenerator: IdGenerator;
 

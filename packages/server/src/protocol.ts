@@ -29,6 +29,9 @@ type AiModelInput = Model<Api>["input"][number];
 type ProtocolModelInput = ModelMetadata["input"][number];
 type _AiModelInputsFitProtocol = Assert<AiModelInput extends ProtocolModelInput ? true : false>;
 type _ProtocolModelInputsFitAi = Assert<ProtocolModelInput extends AiModelInput ? true : false>;
+
+// 这里是 ai 与 protocol 的显式防腐层：内部 Model/Message 可以包含更多运行时
+// 字段，但跨进程协议只暴露经过校验、复制和裁剪后的 JSON 结构。
 /**
  * Enumerate mapped and intentionally omitted pi-ai fields so additions fail compilation here.
  * Provider replay metadata, diagnostics, cache-write retention splits, model transport settings,

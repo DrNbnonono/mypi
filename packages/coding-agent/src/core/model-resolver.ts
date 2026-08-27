@@ -205,6 +205,8 @@ export function parseModelPattern(
 	availableModels: Model<Api>[],
 	options?: { allowInvalidThinkingLevelFallback?: boolean },
 ): ParsedModelResult {
+	// pattern 同时承载“模型匹配”和可选的“思考级别”后缀，例如
+	// provider/model:high。先尝试完整模型 ID，避免把模型 ID 自身的冒号误判成级别。
 	// Try exact match first
 	const exactMatch = tryMatchModel(pattern, availableModels);
 	if (exactMatch) {
@@ -408,6 +410,8 @@ export function resolveCliModel(options: {
 	cliThinking?: ThinkingLevel;
 	modelRuntime: ModelRuntime;
 }): ResolveCliModelResult {
+	// CLI 解析优先保证选择明确且可用：先处理显式 provider，再处理 provider/model，
+	// 最后才进行模糊匹配；多个 Provider 都命中时必须报歧义，不能依赖目录顺序。
 	const { cliProvider, cliModel, cliThinking, modelRuntime } = options;
 
 	if (!cliModel) {

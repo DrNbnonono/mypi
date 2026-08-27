@@ -33,6 +33,8 @@ export type { QueueMode } from "./types.ts";
 
 // Agent 接收的消息类型
 function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
+	// 默认只把模型协议认识的三类消息送入 pi-ai；UI 状态、审计记录等自定义消息
+	// 不应被误当成用户输入。需要保留自定义消息语义时，由调用方提供转换函数。
 	return messages.filter(
 		(message) => message.role === "user" || message.role === "assistant" || message.role === "toolResult",
 	);
@@ -128,6 +130,8 @@ export interface AgentOptions {
 }
 
 class PendingMessageQueue {
+	// steering 和 follow-up 都是“延迟注入”的消息，但注入时机不同：前者插入
+	// 当前运行的下一轮，后者只在 Agent 原本准备结束时触发下一轮。
 	private messages: AgentMessage[] = [];
 	public mode: QueueMode;
 
@@ -176,6 +180,8 @@ type ActiveRun = {
  * and exposes queueing APIs for steering and follow-up messages.
  */
 export class Agent {
+	// 这是有状态外壳：它持有 transcript、队列和运行时状态，并把每次低层 loop
+	// 产生的事件折叠回 state；agent-loop 本身只负责一次运行的控制流。
 	private _state: MutableAgentState;
 	private readonly listeners = new Set<(event: AgentEvent, signal: AbortSignal) => Promise<void> | void>();
 	private readonly steeringQueue: PendingMessageQueue;
@@ -221,6 +227,7 @@ export class Agent {
 	constructor(options: AgentOptions) {
 		// Older compiled consumers may omit options or streamFn even though the current API requires them.
 		const runtimeOptions: Partial<AgentOptions> = options ?? {};
+		// 构造阶段只组装依赖和默认策略，不发起模型请求；请求从 prompt/continue 开始。
 		this._state = createMutableAgentState(runtimeOptions.initialState);
 		this.convertToLlm = runtimeOptions.convertToLlm ?? defaultConvertToLlm;
 		this.transformContext = runtimeOptions.transformContext;
@@ -358,6 +365,7 @@ export class Agent {
 				"Agent is already processing a prompt. Use steer() or followUp() to queue messages, or wait for completion.",
 			);
 		}
+		// prompt 会把新消息作为本次运行的起点；运行期间追加内容应使用 steer/followUp。
 		const messages = this.normalizePromptInput(input, images);
 		await this.runPromptMessages(messages);
 	}
@@ -368,6 +376,8 @@ export class Agent {
 			throw new Error("Agent is already processing. Wait for completion before continuing.");
 		}
 
+		// continue 不新增用户消息，而是从已有 user/toolResult 之后再次请求模型。
+		// assistant 结尾时只有已排队消息可以启动新运行，避免重复发送同一回答。
 		const lastMessage = this._state.messages[this._state.messages.length - 1];
 		if (!lastMessage) {
 			throw new Error("No messages to continue from");
@@ -440,6 +450,8 @@ export class Agent {
 	}
 
 	private createContextSnapshot(): AgentContext {
+		// 只复制顶层数组：loop 可以在自己的上下文中追加消息，但不会改写 Agent
+		// 当前持有的数组；数组内的消息对象仍按事件流逐步替换。
 		return {
 			systemPrompt: this._state.systemPrompt,
 			messages: this._state.messages.slice(),
@@ -448,6 +460,8 @@ export class Agent {
 	}
 
 	private createLoopConfig(options: { skipInitialSteeringPoll?: boolean } = {}): AgentLoopConfig {
+		// 将有状态 Agent 的字段映射为一次低层 loop 的配置，并通过闭包把队列、
+		// hook 和动态 API key 接回当前实例。
 		let skipInitialSteeringPoll = options.skipInitialSteeringPoll === true;
 		const shouldStopAfterTurn = this.shouldStopAfterTurn;
 		return {
@@ -493,6 +507,7 @@ export class Agent {
 			throw new Error("Agent is already processing.");
 		}
 
+		// activeRun 同时承担并发闸门、取消信号和 idle Promise 三个职责。
 		const abortController = new AbortController();
 		let resolvePromise = () => {};
 		const promise = new Promise<void>((resolve) => {
@@ -547,6 +562,8 @@ export class Agent {
 	 * and `finishRun()` clears runtime-owned state.
 	 */
 	private async processEvents(event: AgentEvent): Promise<void> {
+		// 先折叠内部状态，再通知外部监听器；因此监听器看到的是该事件已经生效
+		// 后的 state。监听器仍属于运行生命周期，尤其是 agent_end 之后才真正 idle。
 		switch (event.type) {
 			case "message_start":
 				this._state.streamingMessage = event.message;

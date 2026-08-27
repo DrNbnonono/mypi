@@ -37,6 +37,8 @@ interface ConnectionOptions {
 	onStateChange(change: ConnectionStateChange): void;
 }
 
+// Connection 只维护一次物理连接的生命周期和协议握手，不理解 Session 业务。
+// 每次重连都会生成新的 id，旧 transport 的迟到事件会被忽略。
 export class Connection {
 	readonly #options: ConnectionOptions;
 	readonly #maxFrameLength: number;
@@ -64,6 +66,8 @@ export class Connection {
 	}
 
 	connect(): Promise<ServerSnapshot> {
+		// 每次 connect 创建新的 decoder 和 connection id；握手完成前不能发送业务
+		// command，旧连接的 close/data 回调也必须通过 id 检查后才能影响当前状态。
 		if (this.#lifecycle.state !== "disconnected") {
 			return Promise.reject(new PiDisconnectedError(`PiClient is already ${this.#lifecycle.state}`));
 		}
@@ -160,6 +164,8 @@ export class Connection {
 	}
 
 	#handleMessage(message: ServerMessage): void {
+		// connecting 阶段只接受 hello/hello_error；ready 后才把业务消息交给 PiClient。
+		// 这使协议握手和 Session 请求不会在状态未初始化时交错执行。
 		const lifecycle = this.#lifecycle;
 		if (lifecycle.state === "connecting") {
 			if (message.type === "hello_error") {

@@ -66,6 +66,8 @@ function probeTmuxHyperlinks(): boolean {
 }
 
 export function detectCapabilities(tmuxForwardsHyperlink: () => boolean = probeTmuxHyperlinks): TerminalCapabilities {
+	// 终端能力不能仅由一个环境变量决定：先识别终端程序，再处理 tmux/screen 转发，
+	// 最后决定图片协议、真彩色和 hyperlink 是否可安全输出。
 	const termProgram = process.env.TERM_PROGRAM?.toLowerCase() || "";
 	const terminalEmulator = process.env.TERMINAL_EMULATOR?.toLowerCase() || "";
 	const term = process.env.TERM?.toLowerCase() || "";
@@ -136,6 +138,8 @@ export function detectCapabilities(tmuxForwardsHyperlink: () => boolean = probeT
 }
 
 export function getCapabilities(): TerminalCapabilities {
+	// 能力探测涉及环境查询，因此按进程缓存；测试或终端切换后可用
+	// resetCapabilitiesCache/setCapabilities 显式刷新或注入结果。
 	if (!cachedCapabilities) {
 		cachedCapabilities = detectCapabilities();
 	}
@@ -183,6 +187,8 @@ export function encodeKitty(
 		moveCursor?: boolean;
 	} = {},
 ): string {
+	// Kitty 图片协议需要把 base64 数据拆成多段控制序列；options 的 rows/columns
+	// 控制布局，imageId 用于后续删除或重定位，不能把它当作普通终端文本输出。
 	const CHUNK_SIZE = 4096;
 
 	const params: string[] = ["a=T", "f=100", "q=2"];

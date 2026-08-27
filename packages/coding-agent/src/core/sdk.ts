@@ -169,6 +169,8 @@ function getDefaultAgentDir(): string {
  * ```
  */
 export async function createAgentSession(options: CreateAgentSessionOptions = {}): Promise<CreateAgentSessionResult> {
+	// 这是编码 Agent 的组装工厂：先确定 cwd/配置/Session/模型，再创建底层 Agent，
+	// 最后加载 Extension 和工具。options 中显式提供的运行时依赖优先于默认创建逻辑。
 	const cwd = resolvePath(options.cwd ?? options.sessionManager?.getCwd() ?? process.cwd());
 	const agentDir = options.agentDir ? resolvePath(options.agentDir) : getDefaultAgentDir();
 	let resourceLoader = options.resourceLoader;
@@ -264,6 +266,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	// Create convertToLlm wrapper that filters images if blockImages is enabled (defense-in-depth)
 	const convertToLlmWithBlockImages = (messages: AgentMessage[]): Message[] => {
+		// 图片过滤放在应用层的转换边界，既不改变 Agent 内部 transcript，也能让设置
+		// 在同一 Session 中动态生效，形成对 Provider 能力检查之外的防御性约束。
 		const converted = convertToLlm(messages);
 		// Check setting dynamically so mid-session changes take effect
 		if (!settingsManager.getBlockImages()) {

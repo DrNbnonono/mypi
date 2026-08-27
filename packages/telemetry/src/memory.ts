@@ -123,6 +123,8 @@ function startInMemorySpan<T>(
 	options: SpanOptions,
 	callback: (span: TelemetrySpan) => T | Promise<T>,
 ): Promise<T> {
+	// callback 的同步异常和异步 rejection 都会把 span 标记为 error；记录本身是
+	// 旁路行为，属性复制失败时不能反向破坏被观测业务。
 	if (parent?.settled) return NOOP_TELEMETRY_CONTEXT.startSpan(options, callback);
 
 	let recordedSpan: MutableRecordedTelemetrySpan;

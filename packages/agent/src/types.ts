@@ -26,11 +26,18 @@ import type { Static, TSchema } from "typebox";
  * - Failures must be encoded in the returned stream via protocol events and a
  *   final AssistantMessage with stopReason "error" or "aborted" and errorMessage.
  */
+// Agent 不关心用的什么模型。这里是Agent给用户model等
 export type StreamFn = (
 	model: Model<Api>,
 	context: Context,
 	options?: SimpleStreamOptions,
 ) => AssistantMessageEventStream | Promise<AssistantMessageEventStream>;
+
+/**
+ * 中文理解：Agent 只消费统一的 AssistantMessageEventStream，不直接认识
+ * OpenAI、Anthropic 等上游协议。具体协议转换由 pi-ai 完成，Agent 只负责
+ * 驱动事件流并把最终 AssistantMessage 纳入自己的上下文。
+ */
 
 /**
  * Configuration for how tool calls from a single assistant message are executed.
@@ -40,7 +47,7 @@ export type StreamFn = (
  *   `tool_execution_end` is emitted in tool completion order after each tool is finalized,
  *   while tool-result message artifacts are emitted later in assistant source order.
  */
-export type ToolExecutionMode = "sequential" | "parallel";
+export type ToolExecutionMode = "sequential" | "parallel"; // 工具工作动态模式 顺序/平行
 
 /**
  * Controls how many queued user messages are injected when the agent loop reaches a queue drain point.
@@ -151,6 +158,12 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	model: Model<any>;
 
 	/**
+	 * 中文理解：AgentMessage 是运行时内部消息，Message 是 LLM 能理解的消息。
+	 * 这个转换点允许应用保留 UI 通知、审计信息等自定义消息，同时在请求模型
+	 * 之前过滤或重写它们。
+	 */
+
+	/**
 	 * Converts AgentMessage[] to LLM-compatible Message[] before each LLM call.
 	 *
 	 * Each AgentMessage must be converted to a UserMessage, AssistantMessage, or ToolResultMessage
@@ -199,6 +212,8 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * ```
 	 */
 	transformContext?: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>;
+
+	/** 中文理解：先做 Agent 级上下文整理，再做 AgentMessage 到 Message 的转换。 */
 
 	/**
 	 * Resolves an API key dynamically for each LLM call.
@@ -298,6 +313,7 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
  * Note: "xhigh" and "max" are only supported by selected model families. Use model
  * thinking-level metadata from @earendil-works/pi-ai to detect support for a concrete model.
  */
+// 思考强度
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 /**
@@ -314,6 +330,7 @@ export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhi
  * }
  * ```
  */
+
 export interface CustomAgentMessages {
 	// Empty by default - apps extend via declaration merging
 }
@@ -323,6 +340,7 @@ export interface CustomAgentMessages {
  * This abstraction allows apps to add custom message types while maintaining
  * type safety and compatibility with the base LLM messages.
  */
+// AgentMessage 是运行时内部消息，Message 是 LLM 能理解的消息。这个转换点允许应用保留 UI 通知、审计信息等自定义消息，同时在请求模型之前过滤或重写它们。
 export type AgentMessage = Message | CustomAgentMessages[keyof CustomAgentMessages];
 
 /**
@@ -332,6 +350,7 @@ export type AgentMessage = Message | CustomAgentMessages[keyof CustomAgentMessag
  * assigned arrays before storing them.
  */
 export interface AgentState {
+	/** 中文理解：这是 Agent 的可观察状态；消息和工具是当前运行使用的集合。 */
 	/** System prompt sent with each model request. */
 	systemPrompt: string;
 	/** Active model used for future turns. */
@@ -357,7 +376,7 @@ export interface AgentState {
 	/** Error message from the most recent failed or aborted assistant turn, if any. */
 	readonly errorMessage?: string;
 }
-
+// 最终的工具调用结果
 /** Final or partial result produced by a tool. */
 export interface AgentToolResult<T> {
 	/** Text or image content returned to the model. */
@@ -385,6 +404,11 @@ export type AgentToolUpdateCallback<T = any> = (partialResult: AgentToolResult<T
 
 /** Tool definition used by the agent runtime. */
 export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any> extends Tool<TParameters> {
+	/**
+	 * 中文理解：工具执行函数是 Agent Loop 的副作用边界。模型只能提出 Tool Call，
+	 * 经过参数校验和 beforeToolCall 后才会进入 execute；失败应通过 throw 交给
+	 * Loop 统一转换成 isError 的 Tool Result。
+	 */
 	/** Human-readable label for UI display. */
 	label: string;
 	/**
@@ -411,6 +435,7 @@ export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any
 
 /** Context snapshot passed into the low-level agent loop. */
 export interface AgentContext {
+	/** 中文理解：一次 Agent Loop 的最小上下文，包含系统提示、消息和可用工具。 */
 	/** System prompt included with the request. */
 	systemPrompt: string;
 	/** Transcript visible to the model. */
@@ -426,8 +451,9 @@ export interface AgentContext {
  * listeners for that event are still part of run settlement. The agent becomes
  * idle only after those listeners finish.
  */
+// 导出事件类型
 export type AgentEvent =
-	// Agent lifecycle
+	// Agent lifecycle：一次 prompt/continue 的最外层生命周期。
 	| { type: "agent_start" }
 	| { type: "agent_end"; messages: AgentMessage[] }
 	// Turn lifecycle - a turn is one assistant response + any tool calls/results

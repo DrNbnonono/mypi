@@ -35,6 +35,8 @@ export function agentLoop(
 	signal: AbortSignal | undefined,
 	streamFn: StreamFn,
 ): EventStream<AgentEvent, AgentMessage[]> {
+	// 对外返回可订阅的事件流，同时异步启动一次完整运行；结果在 agent_end
+	// 事件出现后作为 EventStream 的最终值结束。
 	const stream = createAgentStream();
 
 	void runAgentLoop(
@@ -67,6 +69,8 @@ export function agentLoopContinue(
 	signal: AbortSignal | undefined,
 	streamFn: StreamFn,
 ): EventStream<AgentEvent, AgentMessage[]> {
+	// continuation 复用现有上下文，不添加新的 user 消息，适合从 toolResult
+	// 或失败后的可继续状态再次请求模型。
 	if (context.messages.length === 0) {
 		throw new Error("Cannot continue: no messages in context");
 	}
@@ -160,17 +164,19 @@ async function runLoop(
 	emit: AgentEventSink,
 	streamFunction: StreamFn,
 ): Promise<void> {
+	// 外层循环处理 follow-up，内层循环处理 tool call 和 steering；这个分层
+	// 让“当前回合中插入”和“本轮结束后继续”拥有明确且不同的时机。
 	let currentContext = initialContext;
 	let config = initialConfig;
 	let firstTurn = true;
 	// Check for steering messages at start (user may have typed while waiting)
 	let pendingMessages: AgentMessage[] = (await config.getSteeringMessages?.()) || [];
 
-	// Outer loop: continues when queued follow-up messages arrive after agent would stop
+	// 外层循环：Agent 原本要停止时，如果有 follow-up，就重新进入内层循环。
 	while (true) {
 		let hasMoreToolCalls = true;
 
-		// Inner loop: process tool calls and steering messages
+		// 内层循环：先处理工具调用，再检查 steering，直到当前回合没有后续工作。
 		while (hasMoreToolCalls || pendingMessages.length > 0) {
 			if (!firstTurn) {
 				await emit({ type: "turn_start" });
@@ -285,6 +291,8 @@ async function streamAssistantResponse(
 	emit: AgentEventSink,
 	streamFunction: StreamFn,
 ): Promise<AssistantMessage> {
+	// 这里是 Agent 与 pi-ai 的核心边界：先整理 AgentMessage，再转换为统一
+	// Message，交给 streamFunction；返回的 AssistantMessage 随事件流写回上下文。
 	// Apply context transform if configured (AgentMessage[] → AgentMessage[])
 	let messages = context.messages;
 	if (config.transformContext) {
@@ -382,6 +390,8 @@ async function failToolCallsFromTruncatedMessage(
 	toolCalls: AgentToolCall[],
 	emit: AgentEventSink,
 ): Promise<ExecutedToolCallBatch> {
+	// length 截断后的 JSON 可能“碰巧能解析”，但参数仍可能是不完整的；安全策略是
+	// 一个都不执行，让模型在下一轮重新生成完整 Tool Call。
 	const messages: ToolResultMessage[] = [];
 	for (const toolCall of toolCalls) {
 		await emit({
@@ -415,6 +425,8 @@ async function executeToolCalls(
 	signal: AbortSignal | undefined,
 	emit: AgentEventSink,
 ): Promise<ExecutedToolCallBatch> {
+	// 全局 sequential 或任一工具声明 sequential，都会把整个批次降为串行，避免
+	// 有副作用的工具与其他工具并发运行。
 	const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
 	const hasSequentialToolCall = toolCalls.some(
 		(tc) => currentContext.tools?.find((t) => t.name === tc.name)?.executionMode === "sequential",
@@ -494,6 +506,8 @@ async function executeToolCallsParallel(
 	signal: AbortSignal | undefined,
 	emit: AgentEventSink,
 ): Promise<ExecutedToolCallBatch> {
+	// 参数准备仍按源顺序进行；真正执行可以并发。tool_execution_end 按完成顺序
+	// 发出，而 ToolResultMessage 最后按 assistant 的调用顺序写回上下文。
 	const finalizedCalls: FinalizedToolCallEntry[] = [];
 
 	for (const toolCall of toolCalls) {
@@ -604,6 +618,8 @@ async function prepareToolCall(
 	config: AgentLoopConfig,
 	signal: AbortSignal | undefined,
 ): Promise<PreparedToolCall | ImmediateToolCallOutcome> {
+	// 这是工具副作用前的安全检查链：查找工具 → 预处理参数 → schema 校验 →
+	// beforeToolCall。任一步阻断都转换为立即返回的错误 Tool Result。
 	const tool = currentContext.tools?.find((t) => t.name === toolCall.name);
 	if (!tool) {
 		return {

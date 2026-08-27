@@ -51,6 +51,8 @@ function validateTimeout(timeout: number | undefined): void {
 export function createBashTool<TContext extends ExecutionToolContext = ExecutionToolContext>(
 	options?: BashToolOptions<TContext>,
 ): AgentHarnessTool<TContext, typeof bashSchema, BashToolDetails | undefined> {
+	// commandPrefix 和 prepare 是执行前扩展点：前者可注入统一 shell 前缀，后者可
+	// 在真正 spawn 前设置环境或做授权检查；timeout 以秒传入，底层再转换为毫秒。
 	return {
 		name: "bash",
 		label: "bash",
