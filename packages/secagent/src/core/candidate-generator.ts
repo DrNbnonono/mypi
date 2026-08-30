@@ -1,3 +1,5 @@
+import { buildDefaultActionInput } from "./action-input.ts";
+import { strategyKey } from "./planner.ts";
 import { getSecurityToolAdapter, getSecurityToolMetadata } from "../tools/registry.ts";
 import type {
 	CandidateActionInput,
@@ -52,6 +54,23 @@ function firstArtifactPath(state: SecurityState): string | undefined {
 	return state.task?.assets.find((asset) => asset.path)?.path;
 }
 
+function selectedAction(state: SecurityState, decisionIndex: number): CandidateActionInput | undefined {
+	const decision = state.decisions[decisionIndex];
+	return decision?.candidates.find((candidate) => candidate.id === decision.selectedActionId);
+}
+
+function wasSuccessfullyCompleted(state: SecurityState, candidateId: string): boolean {
+	return state.decisions.some((decision, index) => decision.resultStatus === "succeeded" && selectedAction(state, index)?.id === candidateId);
+}
+
+function failedStrategyCount(state: SecurityState, candidate: CandidateActionInput): number {
+	const key = strategyKey(candidate);
+	return state.decisions.filter((decision, index) => {
+		const action = selectedAction(state, index);
+		return decision.resultStatus === "failed" && action !== undefined && strategyKey(action) === key;
+	}).length;
+}
+
 export function generateCandidateActions(state: SecurityState): GeneratedCandidateSet {
 	const scenario = state.task?.scenario ?? "penetration-test";
 	const ctfKind = state.ctfProfile?.kind;
@@ -65,7 +84,7 @@ export function generateCandidateActions(state: SecurityState): GeneratedCandida
 		if (template.localArtifact && !artifactPath) return [];
 		const metadata = getSecurityToolMetadata(template.tool);
 		const stageMatch = template.stages.includes(state.stage);
-		return [{
+		const candidate: CandidateActionInput = {
 			id: `auto-${template.tool}-${template.capability}`,
 			tool: template.tool,
 			capability: template.capability,
@@ -79,7 +98,15 @@ export function generateCandidateActions(state: SecurityState): GeneratedCandida
 			expectedEvidence: [...template.expectedEvidence],
 			successCriteria: state.task?.successCriteria.slice(0, 6) ?? [],
 			stopConditions: ["scope changes", "budget exhausted", "evidence contradicts the action premise"],
-		} satisfies CandidateActionInput];
+		};
+		if (wasSuccessfullyCompleted(state, candidate.id)) return [];
+		if (failedStrategyCount(state, candidate) >= 2) return [];
+		const defaultInput = buildDefaultActionInput(state, candidate);
+		if (!defaultInput.ok) {
+			if (defaultInput.reason) gaps.push(`${candidate.tool}: ${defaultInput.reason}`);
+			return [];
+		}
+		return [candidate];
 	});
 	const networkRelevant = TEMPLATES.some((template) => template.network && scenarioMatches(template, scenario, ctfKind));
 	const artifactRelevant = TEMPLATES.some((template) => template.localArtifact && scenarioMatches(template, scenario, ctfKind));
@@ -87,5 +114,7 @@ export function generateCandidateActions(state: SecurityState): GeneratedCandida
 	if (artifactRelevant && !artifactPath) gaps.push("Local artifact strategies require an input asset with an in-workspace path");
 	if (scenario === "ctf" && (ctfKind === "crypto" || ctfKind === "unknown"))
 		gaps.push("No arbitrary computation adapter is auto-generated; use bounded reasoning/MCP capabilities and keep execution under the parent SecAgent policy");
-	return { candidates, gaps };
+	if (candidates.length === 0 && state.decisions.some((decision) => decision.resultStatus === "succeeded"))
+		gaps.push("All deterministic candidates for this state are already completed or exhausted; add evidence/hypotheses, change stage, or finish the task");
+	return { candidates, gaps: [...new Set(gaps)] };
 }
