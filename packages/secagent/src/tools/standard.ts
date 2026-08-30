@@ -72,9 +72,10 @@ export async function checkCommandVersion(
 	command: string,
 	context: SecurityToolExecutionContext,
 	timeoutMs: number,
+	versionArgs: readonly string[] = ["--version"],
 ): Promise<{ version?: string; diagnostic?: SecurityToolExecutionResult["diagnostic"] }> {
 	try {
-		const result = await commandExecutor(context).run(command, ["--version"], {
+		const result = await commandExecutor(context).run(command, versionArgs, {
 			cwd: context.cwd,
 			signal: context.signal,
 			timeoutMs,
@@ -85,7 +86,7 @@ export async function checkCommandVersion(
 			return {
 				diagnostic: {
 					code: "incompatible",
-					message: `${command} is present but --version failed`,
+					message: `${command} is present but version check failed`,
 					command,
 					exitCode: result.exitCode,
 				},
@@ -114,8 +115,9 @@ export async function checkCommandVersion(
 export async function checkCommandAvailability(
 	command: string,
 	context: SecurityToolExecutionContext,
+	versionArgs?: readonly string[],
 ): Promise<SecurityToolAvailability> {
-	const result = await checkCommandVersion(command, context, 5_000);
+	const result = await checkCommandVersion(command, context, 5_000, versionArgs);
 	return result.diagnostic
 		? { available: false, diagnostic: result.diagnostic }
 		: { available: true, version: result.version };
@@ -138,6 +140,7 @@ export async function runStandardTool(options: {
 	targets: readonly string[];
 	input: Record<string, unknown>;
 	context: SecurityToolExecutionContext;
+	versionArgs?: readonly string[];
 	normalize?: (output: Record<string, unknown>) => unknown;
 }): Promise<SecurityToolExecutionResult> {
 	let timeoutMs: number;
@@ -146,7 +149,12 @@ export async function runStandardTool(options: {
 	} catch (error) {
 		return preconditionResult(error instanceof Error ? error.message : String(error));
 	}
-	const availability = await checkCommandVersion(options.command, options.context, Math.min(timeoutMs, 5_000));
+	const availability = await checkCommandVersion(
+		options.command,
+		options.context,
+		Math.min(timeoutMs, 5_000),
+		options.versionArgs,
+	);
 	if (availability.diagnostic) return diagnosticResult(availability.diagnostic);
 	try {
 		const result = await commandExecutor(options.context).run(options.command, options.args, {

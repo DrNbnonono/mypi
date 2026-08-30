@@ -32,6 +32,7 @@ export * from "./tools/catalog.ts";
 export * from "./tools/curl.ts";
 export * from "./tools/executor.ts";
 export * from "./tools/file.ts";
+export * from "./tools/forensics.ts";
 export * from "./tools/gateway.ts";
 export * from "./tools/nmap.ts";
 export * from "./tools/registry.ts";

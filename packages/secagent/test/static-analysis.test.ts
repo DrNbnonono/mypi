@@ -12,7 +12,7 @@ class FakeExecutor implements SecurityToolExecutor {
 		if (args[0] === "--version")
 			return Promise.resolve({ stdout: `${command} GNU Binutils 2.42`, stderr: "", exitCode: 0, timedOut: false, durationMs: 1 });
 		const stdout = command === "readelf"
-			? "ELF Header:\n  Type: EXEC\n  Machine: Advanced Micro Devices X86-64\n  Entry point address: 0x401000\n"
+			? "ELF Header:\n  Type: DYN (Position-Independent Executable file)\n  Machine: Advanced Micro Devices X86-64\n  Entry point address: 0x401000\n  GNU_STACK 0x000000 0x000000 0x000000 0x0 0x0 RW 0x10\n  GNU_RELRO 0x000000\n  1: 000000 __stack_chk_fail\n 0x000000000000001e (FLAGS) BIND_NOW\n"
 			: "sample.bin: file format elf64-x86-64\n";
 		return Promise.resolve({ stdout, stderr: "", exitCode: 0, timedOut: false, durationMs: 2 });
 	}
@@ -31,7 +31,7 @@ describe("static analysis adapters", () => {
 		await writeFile(fixture, Buffer.from("ELF fixture"));
 		const executor = new FakeExecutor();
 		const readelf = await getSecurityToolAdapter("readelf")?.execute(
-			{ path: fixture, action: "headers" },
+			{ path: fixture, action: "security" },
 			{ cwd: directory, executor },
 		);
 		const objdump = await getSecurityToolAdapter("objdump")?.execute(
@@ -39,9 +39,11 @@ describe("static analysis adapters", () => {
 			{ cwd: directory, executor },
 		);
 		expect(readelf?.ok).toBe(true);
-		expect((readelf?.output as { facts: { architecture?: string } }).facts.architecture).toContain("X86-64");
+		const facts = (readelf?.output as { facts: { architecture?: string; mitigations?: Record<string, string> } }).facts;
+		expect(facts.architecture).toContain("X86-64");
+		expect(facts.mitigations).toMatchObject({ pie: "likely-enabled", nx: "enabled", relro: "full", stackCanary: "detected" });
 		expect(objdump?.ok).toBe(true);
-		expect(executor.calls.find((call) => call.command === "readelf" && call.args[0] !== "--version")?.args).toEqual(["-h", fixture]);
+		expect(executor.calls.find((call) => call.command === "readelf" && call.args[0] !== "--version")?.args).toEqual(["-W", "-h", "-l", "-s", "-d", fixture]);
 		expect(executor.calls.find((call) => call.command === "objdump" && call.args[0] !== "--version")?.args).toEqual(["-d", fixture]);
 	});
 

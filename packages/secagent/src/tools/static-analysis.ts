@@ -3,8 +3,7 @@ import type { SecurityToolAdapter, SecurityToolExecutionContext, SecurityToolExe
 import { checkCommandAvailability, checkLocalInput, preconditionResult, runStandardTool, stringInput } from "./standard.ts";
 
 type StaticToolName = "readelf" | "objdump";
-
-type StaticAction = "headers" | "sections" | "symbols" | "dynamic" | "notes" | "relocations" | "disassemble";
+type StaticAction = "headers" | "sections" | "symbols" | "dynamic" | "notes" | "relocations" | "disassemble" | "security";
 
 const READELF_ARGS: Readonly<Partial<Record<StaticAction, readonly string[]>>> = {
 	headers: ["-h"],
@@ -13,6 +12,7 @@ const READELF_ARGS: Readonly<Partial<Record<StaticAction, readonly string[]>>> =
 	dynamic: ["-d"],
 	notes: ["-n"],
 	relocations: ["-r"],
+	security: ["-W", "-h", "-l", "-s", "-d"],
 };
 
 const OBJDUMP_ARGS: Readonly<Partial<Record<StaticAction, readonly string[]>>> = {
@@ -28,7 +28,7 @@ function localPath(input: Record<string, unknown>): string | undefined {
 
 function staticAction(input: Record<string, unknown>): StaticAction {
 	const value = stringInput(input, "action") ?? "headers";
-	if (["headers", "sections", "symbols", "dynamic", "notes", "relocations", "disassemble"].includes(value))
+	if (["headers", "sections", "symbols", "dynamic", "notes", "relocations", "disassemble", "security"].includes(value))
 		return value as StaticAction;
 	throw new Error(`unsupported static-analysis action: ${value}`);
 }
@@ -44,10 +44,24 @@ function valueAfterPrefix(lines: readonly string[], prefix: string): string | un
 	return line?.slice(line.indexOf(prefix) + prefix.length).trim();
 }
 
+function mitigationFacts(stdout: string, lines: readonly string[]): Record<string, string> {
+	const type = valueAfterPrefix(lines, "Type:") ?? "unknown";
+	const stackLine = lines.find((line) => /GNU_STACK/.test(line));
+	const hasRelro = lines.some((line) => /GNU_RELRO/.test(line));
+	const bindNow = /\bBIND_NOW\b|FLAGS[^\n]*\bNOW\b/.test(stdout);
+	return {
+		pie: /\bDYN\b/.test(type) ? "likely-enabled" : /\bEXEC\b/.test(type) ? "disabled" : "unknown",
+		nx: stackLine ? (/\bRWE\b/.test(stackLine) ? "disabled" : "enabled") : "unknown",
+		relro: hasRelro ? (bindNow ? "full" : "partial") : "none-detected",
+		stackCanary: /__stack_chk_fail/.test(stdout) ? "detected" : "not-detected",
+	};
+}
+
 function normalizeStatic(command: StaticToolName, action: StaticAction, output: Record<string, unknown>): Record<string, unknown> {
 	const lines = Array.isArray(output.stdoutLines)
 		? output.stdoutLines.filter((line): line is string => typeof line === "string")
 		: [];
+	const stdout = typeof output.stdout === "string" ? output.stdout : "";
 	return {
 		...output,
 		action,
@@ -57,6 +71,7 @@ function normalizeStatic(command: StaticToolName, action: StaticAction, output: 
 					architecture: valueAfterPrefix(lines, "Machine:"),
 					type: valueAfterPrefix(lines, "Type:"),
 					entryPoint: valueAfterPrefix(lines, "Entry point address:"),
+					...(action === "security" ? { mitigations: mitigationFacts(stdout, lines) } : {}),
 				}
 				: {
 					format: lines.find((line) => /file format/i.test(line))?.trim(),

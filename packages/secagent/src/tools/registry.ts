@@ -4,6 +4,7 @@ import type { SecurityToolAdapter } from "./adapter.ts";
 import { SECURITY_TOOL_CATALOG } from "./catalog.ts";
 import { createCurlAdapter } from "./curl.ts";
 import { createFileAdapter, createStringsAdapter } from "./file.ts";
+import { createForensicsAdapter } from "./forensics.ts";
 import { createNmapAdapter } from "./nmap.ts";
 import { createStaticAnalysisAdapter } from "./static-analysis.ts";
 
@@ -58,13 +59,17 @@ export function getSecurityToolAdapter(name: string): SecurityToolAdapter | unde
 							? createStaticAnalysisAdapter(metadata, "readelf")
 							: metadata.name === "objdump"
 								? createStaticAnalysisAdapter(metadata, "objdump")
-								: undefined;
+								: metadata.name === "binwalk"
+									? createForensicsAdapter(metadata, "binwalk")
+									: metadata.name === "exiftool"
+										? createForensicsAdapter(metadata, "exiftool")
+										: undefined;
 	if (adapter) adapterByName.set(metadata.name, adapter);
 	return adapter;
 }
 
 export function listSecurityToolAdapters(): SecurityToolAdapter[] {
-	return ["nmap", "curl", "file", "strings", "readelf", "objdump"]
+	return ["nmap", "curl", "file", "strings", "readelf", "objdump", "binwalk", "exiftool"]
 		.map((name) => getSecurityToolAdapter(name))
 		.filter((adapter): adapter is SecurityToolAdapter => Boolean(adapter));
 }
