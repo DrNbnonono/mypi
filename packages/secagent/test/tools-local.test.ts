@@ -5,32 +5,34 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getSecurityToolAdapter } from "../src/tools/registry.ts";
 
-let server: Server;
-let baseUrl: string;
-let fixtureDirectory: string;
+const describeRealToolSmoke = process.env.SECAGENT_REAL_TOOL_SMOKE === "1" ? describe : describe.skip;
 
-beforeAll(async () => {
-	server = createServer((_request, response) => {
-		response.writeHead(200, { "content-type": "text/plain" });
-		response.end("local-secagent-ok\n");
+describeRealToolSmoke("real localhost and fixture tool execution", () => {
+	let server: Server;
+	let baseUrl: string;
+	let fixtureDirectory: string;
+
+	beforeAll(async () => {
+		server = createServer((_request, response) => {
+			response.writeHead(200, { "content-type": "text/plain" });
+			response.end("local-secagent-ok\n");
+		});
+		await new Promise<void>((resolve, reject) => {
+			server.once("error", reject);
+			server.listen(0, "127.0.0.1", () => resolve());
+		});
+		const address = server.address();
+		if (!address || typeof address === "string") throw new Error("local test server did not bind to an address");
+		baseUrl = `http://127.0.0.1:${address.port}/health`;
+		fixtureDirectory = await mkdtemp(join(tmpdir(), "pi-secagent-real-tools-"));
+		await writeFile(join(fixtureDirectory, "sample.bin"), Buffer.from("ELF\0local-string\0", "utf8"));
 	});
-	await new Promise<void>((resolve, reject) => {
-		server.once("error", reject);
-		server.listen(0, "127.0.0.1", () => resolve());
+
+	afterAll(async () => {
+		await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+		await rm(fixtureDirectory, { recursive: true, force: true });
 	});
-	const address = server.address();
-	if (!address || typeof address === "string") throw new Error("local test server did not bind to an address");
-	baseUrl = `http://127.0.0.1:${address.port}/health`;
-	fixtureDirectory = await mkdtemp(join(tmpdir(), "pi-secagent-real-tools-"));
-	await writeFile(join(fixtureDirectory, "sample.bin"), Buffer.from("ELF\0local-string\0", "utf8"));
-});
 
-afterAll(async () => {
-	await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-	await rm(fixtureDirectory, { recursive: true, force: true });
-});
-
-describe("real localhost and fixture tool execution", () => {
 	it("uses curl against a local-only HTTP server", async () => {
 		const result = await getSecurityToolAdapter("curl")?.execute(
 			{ target: baseUrl, timeoutMs: 5000 },
