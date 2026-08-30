@@ -69,5 +69,8 @@
 		"gaxios": {
 			"rimraf": "6.1.2"
 		}
+	},
+	"pi-subagents": {
+		"agents": ["./packages/secagent/agents"]
 	}
 }

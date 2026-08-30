@@ -10,6 +10,7 @@ export * from "./intake/intake.ts";
 export * from "./integrations/mcp-policy.ts";
 export * from "./profile.ts";
 export * from "./report/generator.ts";
+export * from "./runtime-packages.ts";
 export * from "./runtime.ts";
 export * from "./tools/adapter.ts";
 export * from "./tools/catalog.ts";

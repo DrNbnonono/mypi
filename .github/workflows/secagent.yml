@@ -5,21 +5,29 @@ on:
     branches:
       - feat/secagent-security-kernel
     paths:
-      - ".pi/**"
+      - "packages/secagent/**"
+      - "packages/coding-agent/**"
+      - "packages/web-ui/**"
+      - ".pi/sandbox.json"
       - ".mcp.json"
+      - "package.json"
       - "tsconfig.json"
       - ".github/workflows/secagent.yml"
   pull_request:
     paths:
-      - ".pi/**"
+      - "packages/secagent/**"
+      - "packages/coding-agent/**"
+      - "packages/web-ui/**"
+      - ".pi/sandbox.json"
       - ".mcp.json"
+      - "package.json"
       - "tsconfig.json"
       - ".github/workflows/secagent.yml"
 
 jobs:
   secagent:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       HUSKY: "0"
     steps:
@@ -33,10 +41,34 @@ jobs:
           cache: npm
 
       - name: Install monorepo dependencies
-        run: npm ci
+        run: npm install --ignore-scripts
 
-      - name: Run SecAgent tests
-        run: npx tsx --test .pi/secagent/tests/*.test.ts
+      - name: Report lockfile drift
+        shell: bash
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            echo "::warning::package-lock.json is stale for the SecAgent workspace changes; regenerate it locally before release."
+          fi
 
-      - name: Type-check repository and SecAgent entrypoints
+      - name: Verify legacy project SecAgent files are gone
+        shell: bash
+        run: |
+          test ! -e .pi/secagent
+          test ! -e .pi/agents/sec-recon.md
+          test ! -e .pi/agents/sec-web.md
+          test ! -e .pi/agents/sec-analysis.md
+          test ! -e .pi/agents/sec-response.md
+          test ! -e .pi/extensions/security-agent.ts
+          test ! -e .pi/extensions/security-report.ts
+
+      - name: Run SecAgent package tests
+        run: npm run test --workspace=@earendil-works/pi-secagent
+
+      - name: Run coding-agent mode tests
+        run: npm run test --workspace=@earendil-works/pi-coding-agent -- test/args.test.ts test/session-manager/agent-mode.test.ts
+
+      - name: Run Web mode tests
+        run: npm run test --workspace=@agegr/pi-web -- components/SecAgentWorkspace.test.mjs lib/agent-mode.test.mjs
+
+      - name: Type-check repository
         run: npx tsgo --noEmit

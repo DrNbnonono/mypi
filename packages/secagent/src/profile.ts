@@ -2,9 +2,10 @@ import type { InlineExtension } from "@earendil-works/pi-coding-agent";
 import type { SecuritySessionStore } from "./core/state.ts";
 import { createSecAgentExtension } from "./extension.ts";
 import { SecAgentRuntime, type SecAgentRuntimeCommand } from "./runtime.ts";
+import { SECAGENT_RUNTIME_PACKAGE_SOURCES } from "./runtime-packages.ts";
 
 export interface CreateSecAgentProfileOptions {
-	runtimePackageSources: string[];
+	runtimePackageSources?: readonly string[];
 }
 
 interface SecAgentProfileRuntime {
@@ -21,12 +22,13 @@ interface SecAgentProfileDefinition {
 	createExtensions(): InlineExtension[];
 }
 
-export function createSecAgentProfile(options: CreateSecAgentProfileOptions): SecAgentProfileDefinition {
+export function createSecAgentProfile(options: CreateSecAgentProfileOptions = {}): SecAgentProfileDefinition {
 	let runtime: SecAgentRuntime | undefined;
+	const runtimePackageSources = options.runtimePackageSources ?? SECAGENT_RUNTIME_PACKAGE_SOURCES;
 	return {
 		mode: "sec",
 		displayName: "Security",
-		resourcePaths: { extensionPaths: [...options.runtimePackageSources] },
+		resourcePaths: { extensionPaths: [...runtimePackageSources] },
 		createRuntime: (context) => {
 			runtime = new SecAgentRuntime(context.sessionManager);
 			const profileRuntime: SecAgentProfileRuntime = {

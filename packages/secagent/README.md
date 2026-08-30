@@ -4,11 +4,16 @@
 
 SecAgent reuses `AgentSession`, extensions, and resource loading from `@earendil-works/pi-coding-agent`. It does not depend on the experimental Agent Harness.
 
-The four generic runtime extensions are pinned as profile resources rather than normal Node imports, so coding sessions do not load them:
+The generic runtime extensions are owned by the SecAgent profile and loaded only for `sec` sessions:
 
 - `pi-sandbox@0.6.3`
 - `pi-mcp-adapter@2.23.0`
 - `pi-subagents@0.50.0`
 - `pi-trace-extension@0.1.14`
 
-See `docs/competition.md` for deployment, operation, and competition evidence mapping.
+`packages/secagent` is the canonical source for the security kernel, profile extension, specialist agents, integration policy, reports, templates, and tests. Project `.pi` files are deployment/configuration overrides only; no SecAgent implementation should live there after migration.
+
+Documentation:
+
+- `docs/architecture.md` — package boundaries, runtime flow, persistence, and extension/plugin ownership.
+- `docs/competition.md` — deployment, operation, deliverables, and competition evidence mapping.

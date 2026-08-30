@@ -34,13 +34,6 @@ export interface AgentProfileInstance {
 	runtime?: AgentProfileRuntime;
 }
 
-const PROFILE_RUNTIME_PACKAGES = [
-	"npm:pi-sandbox@0.6.3",
-	"npm:pi-mcp-adapter@2.23.0",
-	"npm:pi-subagents@0.50.0",
-	"npm:pi-trace-extension@0.1.14",
-] as const;
-
 function createModeCommandExtension(): InlineExtension {
 	return {
 		name: "agent-profile",
@@ -83,8 +76,7 @@ export function assertAgentModeCompatible(sessionManager: SessionManager, reques
 }
 
 export function createAgentProfile(mode: AgentMode, context: AgentProfileContext): AgentProfileInstance {
-	const definition =
-		mode === "sec" ? createSecAgentProfile({ runtimePackageSources: [...PROFILE_RUNTIME_PACKAGES] }) : CODING_PROFILE;
+	const definition = mode === "sec" ? createSecAgentProfile() : CODING_PROFILE;
 	const runtime = definition.createRuntime?.(context);
 	return {
 		definition: {
