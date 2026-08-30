@@ -12,6 +12,18 @@
 
 Before a demonstration, verify model/gateway connectivity, writable workspace/report directory, required CLI versions, MCP discovery, specialist agents, sandbox status, and trace output. Provider URL, model ID, API key, and organizer gateway remain environment/settings inputs and are never hard-coded.
 
+## Test levels
+
+Default package tests are deterministic and do not require external security tools. Adapter behavior is exercised with fake executors so CI can verify command construction, normalization, failure handling, scope, policy, and re-planning without depending on the runner image.
+
+Real executable smoke tests are opt-in release/competition checks and must run only in an explicitly authorized controlled environment with the required tools installed:
+
+```bash
+SECAGENT_REAL_TOOL_SMOKE=1 npm run test --workspace=@earendil-works/pi-secagent -- test/tools-local.test.ts
+```
+
+The current real-tool smoke suite is constrained to a temporary local fixture and loopback targets.
+
 ## Deliverables
 
 - Deployment manual: this file plus `templates/`.
