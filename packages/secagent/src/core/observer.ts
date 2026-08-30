@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { budgetPressure } from "./budget.ts";
+import { strategyKey } from "./planner.ts";
 import type { SecurityDecision, SecurityObserverSignal, SecurityState } from "./types.ts";
 
-function selectedTool(decision: SecurityDecision): string | undefined {
-	return decision.candidates.find((candidate) => candidate.id === decision.selectedActionId)?.tool.toLowerCase();
+function selectedStrategy(decision: SecurityDecision): string | undefined {
+	const action = decision.candidates.find((candidate) => candidate.id === decision.selectedActionId);
+	return action ? strategyKey(action) : undefined;
 }
 
 function signal(
@@ -23,14 +25,16 @@ export function observeSecurityState(state: SecurityState): SecurityObserverSign
 		signals.push(signal("stalled", "warning", `${failed.length} of the last ${recent.length} decisions failed`, failed.map((item) => item.id)));
 	const latest = recent.at(-1);
 	if (latest) {
-		const tool = selectedTool(latest);
-		const repeated = recent.filter((decision) => selectedTool(decision) === tool && decision.resultStatus === "failed");
-		if (tool && repeated.length >= 2)
+		const strategy = selectedStrategy(latest);
+		const repeated = recent.filter(
+			(decision) => selectedStrategy(decision) === strategy && decision.resultStatus === "failed",
+		);
+		if (strategy && repeated.length >= 2)
 			signals.push(
 				signal(
 					"repeated-failure",
 					"critical",
-					`Repeated failed strategy ${tool}; require a materially different action family`,
+					`Repeated failed strategy ${strategy}; require a materially different capability family`,
 					repeated.map((item) => item.id),
 				),
 			);
@@ -64,7 +68,7 @@ export function buildOperationalMemory(state: SecurityState): OperationalMemory 
 	const failures = state.decisions
 		.filter((item) => item.resultStatus === "failed" || item.resultStatus === "contradicted")
 		.slice(-8)
-		.map((item) => `${selectedTool(item) ?? item.selectedActionId}: ${item.actualResult ?? item.resultStatus}`);
+		.map((item) => `${selectedStrategy(item) ?? item.selectedActionId}: ${item.actualResult ?? item.resultStatus}`);
 	return {
 		facts,
 		ideas,

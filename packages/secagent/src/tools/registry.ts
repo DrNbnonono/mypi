@@ -5,6 +5,7 @@ import { SECURITY_TOOL_CATALOG } from "./catalog.ts";
 import { createCurlAdapter } from "./curl.ts";
 import { createFileAdapter, createStringsAdapter } from "./file.ts";
 import { createNmapAdapter } from "./nmap.ts";
+import { createStaticAnalysisAdapter } from "./static-analysis.ts";
 
 const RISK_RANK: Record<RiskLevel, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
 const RISK_SCORE: Record<RiskLevel, number> = { P0: 0.05, P1: 0.3, P2: 0.65, P3: 1 };
@@ -53,13 +54,17 @@ export function getSecurityToolAdapter(name: string): SecurityToolAdapter | unde
 					? createFileAdapter(metadata)
 					: metadata.name === "strings"
 						? createStringsAdapter(metadata)
-						: undefined;
+						: metadata.name === "readelf"
+							? createStaticAnalysisAdapter(metadata, "readelf")
+							: metadata.name === "objdump"
+								? createStaticAnalysisAdapter(metadata, "objdump")
+								: undefined;
 	if (adapter) adapterByName.set(metadata.name, adapter);
 	return adapter;
 }
 
 export function listSecurityToolAdapters(): SecurityToolAdapter[] {
-	return ["nmap", "curl", "file", "strings"]
+	return ["nmap", "curl", "file", "strings", "readelf", "objdump"]
 		.map((name) => getSecurityToolAdapter(name))
 		.filter((adapter): adapter is SecurityToolAdapter => Boolean(adapter));
 }

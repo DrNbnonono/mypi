@@ -38,15 +38,36 @@ function clamp01(value: number): number {
 	return Math.max(0, Math.min(1, value));
 }
 
-function selectedTool(decision: SecurityDecision): string | undefined {
-	return decision.candidates.find((candidate) => candidate.id === decision.selectedActionId)?.tool.toLowerCase();
+export function strategyKey(action: Pick<CandidateActionInput, "tool" | "capability">): string {
+	return action.capability?.trim().toLowerCase() || action.tool.trim().toLowerCase();
+}
+
+function selectedAction(decision: SecurityDecision): ScoredAction | undefined {
+	return decision.candidates.find((candidate) => candidate.id === decision.selectedActionId);
+}
+
+function selectedStrategy(decision: SecurityDecision): string | undefined {
+	const action = selectedAction(decision);
+	return action ? strategyKey(action) : undefined;
+}
+
+function repeatedFailedStrategy(decisions: readonly SecurityDecision[]): string | undefined {
+	const recent = decisions.slice(-4);
+	const latest = recent.at(-1);
+	const latestStrategy = latest ? selectedStrategy(latest) : undefined;
+	if (!latestStrategy || latest?.resultStatus !== "failed") return undefined;
+	const failures = recent.filter(
+		(decision) => selectedStrategy(decision) === latestStrategy && decision.resultStatus === "failed",
+	).length;
+	return failures >= 2 ? latestStrategy : undefined;
 }
 
 function noveltyPenalty(action: CandidateActionInput, decisions: readonly SecurityDecision[]): number {
+	const actionStrategy = strategyKey(action);
 	const recent = decisions.slice(-4);
 	let repeated = 0;
 	for (const decision of recent) {
-		if (selectedTool(decision) !== action.tool.toLowerCase()) continue;
+		if (selectedStrategy(decision) !== actionStrategy) continue;
 		if (decision.resultStatus === "failed" || decision.resultStatus === "contradicted") repeated += 1;
 	}
 	return clamp01(repeated / 3);
@@ -83,7 +104,16 @@ export function scoreCandidate(action: CandidateActionInput, context: PlannerCon
 }
 
 export function rankCandidates(candidates: CandidateActionInput[], context: PlannerContext = {}): ScoredAction[] {
-	return candidates.map((candidate) => scoreCandidate(candidate, context)).sort((left, right) => right.score - left.score);
+	const decisions = context.previousDecisions ?? context.state?.decisions ?? [];
+	const avoidStrategy = repeatedFailedStrategy(decisions);
+	return candidates.map((candidate) => scoreCandidate(candidate, context)).sort((left, right) => {
+		if (avoidStrategy) {
+			const leftRepeated = strategyKey(left) === avoidStrategy;
+			const rightRepeated = strategyKey(right) === avoidStrategy;
+			if (leftRepeated !== rightRepeated) return leftRepeated ? 1 : -1;
+		}
+		return right.score - left.score;
+	});
 }
 
 export function riskScoreToLevel(risk: number): RiskLevel {
@@ -99,15 +129,16 @@ function decisionReplanAssessment(decisions: readonly SecurityDecision[]): Repla
 	if (!latest || latest.resultStatus === undefined || latest.resultStatus === "pending" || latest.resultStatus === "succeeded")
 		return { required: false };
 	const trigger: ReplanTrigger = latest.resultStatus === "contradicted" ? "decision-contradicted" : "decision-failed";
-	const sameToolFailures = decisions
+	const strategy = selectedStrategy(latest);
+	const sameStrategyFailures = decisions
 		.slice(-4)
-		.filter((decision) => selectedTool(decision) === selectedTool(latest) && decision.resultStatus === "failed").length;
-	if (sameToolFailures >= 2)
+		.filter((decision) => selectedStrategy(decision) === strategy && decision.resultStatus === "failed").length;
+	if (strategy && sameStrategyFailures >= 2)
 		return {
 			required: true,
 			decisionId: latest.id,
 			trigger: "repeated-failure",
-			reason: `Repeated failure for ${selectedTool(latest) ?? "selected action"}; choose a materially different strategy`,
+			reason: `Repeated failure for strategy ${strategy}; choose a materially different capability family`,
 		};
 	const reason = latest.actualResult?.trim() || `Decision ${latest.id} ${latest.resultStatus}`;
 	return { required: true, decisionId: latest.id, trigger, reason: `${latest.resultStatus}: ${reason}` };

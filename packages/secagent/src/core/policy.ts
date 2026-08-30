@@ -2,7 +2,10 @@ import { maxRiskLevel, resolveToolCall } from "../tools/registry.ts";
 import type { PolicyMode, RiskAssessment, RiskLevel, SecurityState } from "./types.ts";
 
 const P3_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-	{ pattern: /\brm\s+(?:-[^\s]*r[^\s]*f|--recursive)\b/i, reason: "recursive destructive file deletion" },
+	{
+		pattern: /\brm\s+(?:(?:-[^\s]*r[^\s]*f[^\s]*|-[^\s]*f[^\s]*r[^\s]*)|(?:-[^\s]*r[^\s]*\s+-[^\s]*f[^\s]*|-[^\s]*f[^\s]*\s+-[^\s]*r[^\s]*)|--recursive)\b/i,
+		reason: "recursive destructive file deletion",
+	},
 	{ pattern: /\b(?:mkfs|wipefs)\b/i, reason: "filesystem destruction" },
 	{ pattern: /\bdd\b[^\n]*\bof=\/dev\//i, reason: "raw block-device write" },
 	{ pattern: /\b(?:shutdown|reboot|poweroff|halt)\b/i, reason: "host availability impact" },

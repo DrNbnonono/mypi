@@ -4,7 +4,7 @@ import { assessReplanNeed, rankCandidates } from "../src/core/planner.ts";
 import { createInitialSecurityState } from "../src/core/state.ts";
 import type { CandidateActionInput, SecurityDecision } from "../src/core/types.ts";
 
-function failedDecision(id: string, tool: string): SecurityDecision {
+function failedDecision(id: string, tool: string, capability?: string): SecurityDecision {
 	return {
 		id,
 		createdAt: "2026-08-30T00:00:00Z",
@@ -12,7 +12,7 @@ function failedDecision(id: string, tool: string): SecurityDecision {
 		stage: "analysis",
 		evidenceIds: [],
 		candidates: [{
-			id: `${id}-action`, tool, description: tool, goalRelevance: 1, informationGain: 0.8, confidence: 0.8,
+			id: `${id}-action`, tool, capability, description: tool, goalRelevance: 1, informationGain: 0.8, confidence: 0.8,
 			cost: 0.2, preconditions: [], risk: 0.2, score: 0.7,
 		}],
 		selectedActionId: `${id}-action`,
@@ -32,6 +32,20 @@ describe("competition planner/replanner", () => {
 		const ranked = rankCandidates(candidates, { state });
 		expect(ranked.find((item) => item.id === "repeat")?.noveltyPenalty).toBeGreaterThan(0);
 		expect(ranked[0]?.id).toBe("novel");
+	});
+
+	it("treats capability families as strategies even when tools differ", () => {
+		const state = createInitialSecurityState();
+		state.decisions.push(
+			failedDecision("d1", "curl", "web-enumeration"),
+			failedDecision("d2", "ffuf", "web-enumeration"),
+		);
+		const candidates: CandidateActionInput[] = [
+			{ id: "same-family", tool: "nmap", capability: "web-enumeration", description: "same family", goalRelevance: 1, informationGain: 1, confidence: 1, cost: 0.1, preconditions: [] },
+			{ id: "different-family", tool: "curl", capability: "web-request-analysis", description: "different family", goalRelevance: 0.7, informationGain: 0.7, confidence: 0.7, cost: 0.1, preconditions: [] },
+		];
+		expect(rankCandidates(candidates, { state })[0]?.id).toBe("different-family");
+		expect(assessReplanNeed(state)).toMatchObject({ required: true, trigger: "repeated-failure" });
 	});
 
 	it("raises an explicit repeated-failure replan trigger", () => {

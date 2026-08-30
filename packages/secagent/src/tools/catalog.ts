@@ -202,8 +202,11 @@ export const SECURITY_TOOL_CATALOG: readonly SecurityToolMetadata[] = [
 	tool("strings", "reverse", "P0", "none", ["binary.strings"], "Extract printable strings.", {
 		agents: ["sec-reverse"],
 	}),
-	tool("objdump", "reverse", "P1", "none", ["binary.disassemble"], "Inspect binary sections and disassembly.", {
-		agents: ["sec-reverse"],
+	tool("readelf", "reverse", "P0", "none", ["binary.elf.inspect", "binary.mitigations.inspect"], "Inspect ELF headers, sections, symbols, dynamic metadata, notes and relocations without executing the artifact.", {
+		agents: ["sec-reverse", "sec-vuln"],
+	}),
+	tool("objdump", "reverse", "P1", "none", ["binary.disassemble"], "Inspect binary sections, symbols and disassembly without executing the artifact.", {
+		agents: ["sec-reverse", "sec-vuln"],
 	}),
 	tool("radare2", "reverse", "P1", "none", ["binary.analyze"], "Analyze a binary.", {
 		aliases: ["r2"],
