@@ -81,7 +81,6 @@ export class SecurityExecutionGateway {
 		if (!scope.allowed) return finishDecision(failed(scope.reasons.join("; ")), true);
 		const budget = assessBudget(state.budget, "tool-call");
 		if (!budget.allowed) return finishDecision(failed(budget.reason ?? "Tool-call budget exhausted"), true);
-		if (permission === "deny") return finishDecision(failed(`${risk.level} is denied by the active policy`), true);
 		if (permission === "confirm") {
 			if (!context.confirm) return finishDecision(failed(`${risk.level} requires interactive approval`), true);
 			const approved = await context.confirm(
