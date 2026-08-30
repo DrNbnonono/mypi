@@ -173,7 +173,7 @@ export function evaluateControlledScenario(
 	audit: readonly ToolAuditRecord[],
 ): ControlledScenarioEvaluation {
 	const properties = definition.requiredProperties.map((property) => propertyResult(property, state, audit, definition));
-	const coverage = summarizeCapabilityCoverage(state).map((item) => item.capability);
+	const coverage = summarizeCapabilityCoverage(state).map((item) => item.key);
 	const coveredSet = new Set(coverage);
 	const missingExpectedCapabilities = definition.expectedCapabilities.filter((capability) => !coveredSet.has(capability));
 	const selectedTools = selectedActions(state).map((item) => item.selected.tool);
