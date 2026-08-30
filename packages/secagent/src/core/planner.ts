@@ -1,7 +1,13 @@
 import { planningRiskForTool } from "../tools/registry.ts";
-import type { CandidateActionInput, RiskLevel, ScoredAction } from "./types.ts";
+import type { CandidateActionInput, RiskLevel, ScoredAction, SecurityDecision } from "./types.ts";
 
 const WEIGHTS = { goalRelevance: 0.35, informationGain: 0.3, confidence: 0.2, risk: 0.1, cost: 0.05 } as const;
+
+export interface ReplanAssessment {
+	required: boolean;
+	decisionId?: string;
+	reason?: string;
+}
 
 function clamp01(value: number): number {
 	if (!Number.isFinite(value)) return 0;
@@ -41,4 +47,16 @@ export function riskScoreToLevel(risk: number): RiskLevel {
 	if (normalized < 0.5) return "P1";
 	if (normalized < 0.75) return "P2";
 	return "P3";
+}
+
+export function assessReplanNeed(decisions: readonly SecurityDecision[]): ReplanAssessment {
+	const latest = decisions.at(-1);
+	if (!latest || latest.resultStatus === undefined || latest.resultStatus === "pending" || latest.resultStatus === "succeeded")
+		return { required: false };
+	const reason = latest.actualResult?.trim() || `Decision ${latest.id} ${latest.resultStatus}`;
+	return {
+		required: true,
+		decisionId: latest.id,
+		reason: `${latest.resultStatus}: ${reason}`,
+	};
 }

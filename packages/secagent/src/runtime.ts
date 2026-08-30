@@ -1,4 +1,5 @@
 import { appendAuditRecord, readAuditRecords } from "./core/audit.ts";
+import { assessReplanNeed } from "./core/planner.ts";
 import { canEnableAutonomous } from "./core/policy.ts";
 import type { SecuritySessionStore } from "./core/state.ts";
 import { appendPolicyChange, appendSecurityEvent, replaySecurityState } from "./core/state.ts";
@@ -25,6 +26,9 @@ export interface SecAgentProfileSnapshot {
 	mode: "sec";
 	state: SecurityState;
 	audit: ToolAuditRecord[];
+	replanRequired: boolean;
+	replanDecisionId?: string;
+	replanReason?: string;
 	autonomousReady: boolean;
 	autonomousBlockReason?: string;
 }
@@ -55,10 +59,14 @@ export class SecAgentRuntime {
 
 	snapshot(): SecAgentProfileSnapshot {
 		const autonomous = canEnableAutonomous(this.state);
+		const replan = assessReplanNeed(this.state.decisions);
 		return {
 			mode: "sec",
 			state: structuredClone(this.state),
 			audit: structuredClone(readAuditRecords(this.store)),
+			replanRequired: replan.required,
+			replanDecisionId: replan.decisionId,
+			replanReason: replan.reason,
 			autonomousReady: autonomous.allowed,
 			autonomousBlockReason: autonomous.reason,
 		};

@@ -60,28 +60,41 @@ export class SecurityExecutionGateway {
 			this.runtime.appendAudit(audit);
 			return result;
 		};
+		const finishDecision = (result: SecurityToolExecutionResult, blocked = false): SecurityToolExecutionResult => {
+			const completed = finish(result, blocked);
+			this.runtime.append({
+				type: "decision_completed",
+				decisionId: request.decisionId,
+				actualResult: audit.resultSummary ?? (result.ok ? "tool completed" : "tool failed"),
+				status: result.ok ? "succeeded" : "failed",
+				createdAt: audit.completedAt ?? new Date().toISOString(),
+			});
+			return completed;
+		};
 
 		if (!decision) return finish(failed(`Decision ${request.decisionId} does not exist`), true);
+		if (decision.resultStatus && decision.resultStatus !== "pending")
+			return finish(failed(`Decision ${decision.id} is already ${decision.resultStatus}`), true);
 		const selected = decision.candidates.find((candidate) => candidate.id === decision.selectedActionId);
 		if (!selected || selected.tool.toLowerCase() !== request.tool.toLowerCase())
 			return finish(failed(`Decision ${decision.id} does not authorize tool ${request.tool}`), true);
-		if (!adapter) return finish(failed(`No audited adapter is registered for ${request.tool}`), true);
-		if (!scope.allowed && !autonomousScopeWarning) return finish(failed(scope.reasons.join("; ")), true);
+		if (!adapter) return finishDecision(failed(`No audited adapter is registered for ${request.tool}`), true);
+		if (!scope.allowed && !autonomousScopeWarning) return finishDecision(failed(scope.reasons.join("; ")), true);
 		if (permission === "confirm") {
-			if (!context.confirm) return finish(failed(`${risk.level} requires interactive approval`), true);
+			if (!context.confirm) return finishDecision(failed(`${risk.level} requires interactive approval`), true);
 			const approved = await context.confirm(
 				`SecAgent ${risk.level} approval`,
 				`${request.tool}\n${audit.inputSummary}\n\nRisk: ${risk.reasons.join(", ")}\nScope: ${scope.reasons.join(", ")}`,
 			);
 			audit.userApproved = approved;
-			if (!approved) return finish(failed("Rejected by operator"), true);
+			if (!approved) return finishDecision(failed("Rejected by operator"), true);
 		}
 
 		const availability = await adapter.checkAvailability(context);
 		if (!availability.available)
-			return finish({ ok: false, diagnostic: availability.diagnostic, evidence: [] });
+			return finishDecision({ ok: false, diagnostic: availability.diagnostic, evidence: [] });
 		const preconditions = await adapter.checkPreconditions(request.input, context);
-		if (preconditions.length > 0) return finish(failed(preconditions.join("; ")));
+		if (preconditions.length > 0) return finishDecision(failed(preconditions.join("; ")));
 		const result = await adapter.execute(request.input, context);
 		for (const normalized of result.evidence) {
 			const evidence: SecurityEvidence = {
@@ -95,6 +108,6 @@ export class SecurityExecutionGateway {
 			};
 			this.runtime.append({ type: "evidence_added", evidence, createdAt: evidence.createdAt });
 		}
-		return finish(result);
+		return finishDecision(result);
 	}
 }
