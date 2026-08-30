@@ -13,7 +13,8 @@ SecurityState
   -> scope + risk + budget gates
   -> audited adapter execution
   -> normalized evidence with provenance
-  -> automatic verification of already-linked hypotheses
+  -> operational evidence promotion
+  -> Verifier
   -> Observer sidecar
   -> termination check
   -> next state-space step
@@ -33,18 +34,16 @@ Successful candidate/action identities are not repeatedly selected by the genera
 
 ## Evidence and verification
 
-Gateway execution creates normalized evidence records carrying decision IDs, target references, tool source, and artifact SHA-256 when available. The autonomous verifier only evaluates hypotheses that already have explicit Evidence Graph links; it does not invent hypotheses or auto-promote arbitrary tool output into findings. Confirmed findings still require the normal verification gate.
+Gateway execution creates normalized evidence records carrying decision IDs, target references, tool source, and artifact SHA-256 when available. `core/evidence-promoter.ts` converts successful execution evidence into narrow operational hypotheses such as "an HTTP service is reproducibly observable" or "the supplied artifact has reproducible static properties". Evidence from different tools can converge on the same target-scoped hypothesis, allowing the existing Verifier to measure independent-source support.
+
+Operational promotion deliberately does not claim that a vulnerability is confirmed. Nuclei and similar signals are represented as candidate-vulnerability signals that still require finding-level confirmation. Confirmed findings continue to pass through the normal verification gate.
 
 ## Controlled competition benchmarks
 
-The canonical benchmark matrix is defined in `src/scenarios/controlled.ts` and covers:
+The canonical benchmark matrix is defined in `src/scenarios/controlled.ts` and covers Web security, Pwn/ELF triage, reverse engineering, forensics/incident artifact triage, and multi-stage penetration-test killchain recovery.
 
-- Web security;
-- Pwn/ELF triage;
-- reverse engineering;
-- forensics/incident artifact triage;
-- multi-stage penetration-test killchain recovery.
+`src/scenarios/harness.ts` executes each benchmark in an isolated temporary fixture with the real Candidate Generator, Planner/Replanner, policy/scope gates, SecurityExecutionGateway, registered adapters, Evidence Graph, Verifier, Observer and audit path. Only the external command executor is deterministic, so CI does not depend on Nmap, httpx, Nuclei, binwalk or other competition binaries being installed.
 
-The package test suite executes these scenarios with deterministic controlled executors while exercising the real candidate generator, planner, policy/scope checks, execution gateway, adapters, state replay, evidence capture, observer, and replanner. External-tool smoke tests remain opt-in because CI runners are not guaranteed to provide Nmap, httpx, Nuclei, binwalk, or other competition tools.
+Use `security_benchmark` with `action=run-controlled` to execute one isolated end-to-end harness. The benchmark score now combines invariant checks with successful capability coverage; a trace cannot receive a perfect score merely because safety properties pass while required capability families were never completed.
 
-For the final competition environment, run the same scenario matrix against loopback/container fixtures with the real tools installed. This preserves benchmark logic while replacing only the command executor.
+For the final competition environment, run the same scenario matrix against disposable loopback/container fixtures with the real tools installed. This preserves benchmark logic while replacing only the deterministic command executor.

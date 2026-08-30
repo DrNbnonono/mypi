@@ -1,4 +1,5 @@
 import { evidenceForHypothesis } from "./evidence-graph.ts";
+import { promoteOperationalEvidence } from "./evidence-promoter.ts";
 import type { SecurityVerificationRecord } from "./types.ts";
 import { verifyHypothesis } from "./verifier.ts";
 import type { SecAgentRuntime } from "../runtime.ts";
@@ -9,7 +10,15 @@ function sameEvidence(left: readonly string[], right: readonly string[]): boolea
 	return left.every((id) => rightSet.has(id));
 }
 
+function promoteCompletedDecisionEvidence(runtime: SecAgentRuntime): void {
+	for (const decision of runtime.snapshot().state.decisions) {
+		if (decision.resultStatus !== "succeeded") continue;
+		promoteOperationalEvidence(runtime, decision.id);
+	}
+}
+
 export function runAutomaticVerification(runtime: SecAgentRuntime): SecurityVerificationRecord[] {
+	promoteCompletedDecisionEvidence(runtime);
 	const state = runtime.snapshot().state;
 	const appended: SecurityVerificationRecord[] = [];
 	for (const hypothesis of state.evidenceGraph.hypotheses) {

@@ -37,7 +37,7 @@ describe("controlled competition benchmark matrix", () => {
 		expect(CONTROLLED_AUTONOMY_BENCHMARKS.map((item) => item.id)).toEqual(["web", "pwn", "reverse", "forensics", "killchain"]);
 	});
 
-	it("passes a bounded Web trace with explicit scope and evidence", () => {
+	it("does not award a perfect Web score when expected capability families are missing", () => {
 		const state = createInitialSecurityState();
 		state.task = { id: "web", goal: "fixture", scenario: "web-security", assets: [], constraints: [], successCriteria: [], declaredAuthorization: [], pendingConfirmations: [], createdAt: "2026-08-30T00:00:00Z" };
 		state.goal = state.task.goal;
@@ -45,8 +45,34 @@ describe("controlled competition benchmark matrix", () => {
 		state.decisions.push(succeededDecision("d1", "httpx", "web-enumeration"));
 		state.evidence.push({ id: "e1", kind: "observation", summary: "HTTP 200", source: "httpx", confidence: 0.9, createdAt: "2026-08-30T00:00:01Z" });
 		const result = evaluateControlledScenario(controlledBenchmarkDefinition("web"), state, []);
+		expect(result.passed).toBe(false);
+		expect(result.capabilityScore).toBeLessThan(100);
+		expect(result.missingExpectedCapabilities).toEqual(["web-request-analysis", "vulnerability-verification"]);
+	});
+
+	it("passes a Web trace only after all expected capability families succeed", () => {
+		const state = createInitialSecurityState();
+		state.task = { id: "web", goal: "fixture", scenario: "web-security", assets: [], constraints: [], successCriteria: [], declaredAuthorization: [], pendingConfirmations: [], createdAt: "2026-08-30T00:00:00Z" };
+		state.goal = state.task.goal;
+		state.scope.targets = [{ id: "scope", kind: "url", value: "http://127.0.0.1/" }];
+		state.decisions.push(
+			succeededDecision("d1", "httpx", "web-enumeration"),
+			succeededDecision("d2", "curl", "web-request-analysis"),
+			succeededDecision("d3", "nuclei", "vulnerability-verification"),
+		);
+		state.evidence.push({ id: "e1", kind: "observation", summary: "HTTP 200", source: "httpx", confidence: 0.9, createdAt: "2026-08-30T00:00:01Z" });
+		state.evidenceGraph.hypotheses.push({
+			id: "h1", statement: "HTTP surface is reproducibly observable", status: "verified",
+			createdAt: "2026-08-30T00:00:01Z", updatedAt: "2026-08-30T00:00:02Z",
+		});
+		state.evidenceGraph.verifications.push({
+			id: "v1", hypothesisId: "h1", status: "verified", score: 0.9, evidenceIds: ["e1"], independentSources: 1,
+			reason: "fixture verification", createdAt: "2026-08-30T00:00:02Z",
+		});
+		const result = evaluateControlledScenario(controlledBenchmarkDefinition("web"), state, []);
 		expect(result.passed).toBe(true);
 		expect(result.score).toBe(100);
+		expect(result.successfulCapabilities).toEqual(expect.arrayContaining(["web-enumeration", "web-request-analysis", "vulnerability-verification"]));
 	});
 
 	it("reports missing killchain replanning after a failed decision", () => {
