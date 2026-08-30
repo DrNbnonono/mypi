@@ -78,8 +78,8 @@ export const CTF_CAPABILITIES: readonly CtfCapability[] = [
 
 const KIND_KEYWORDS: Readonly<Record<Exclude<CtfChallengeKind, "unknown">, readonly RegExp[]>> = {
 	web: [/\bweb\b/i, /http/i, /cookie/i, /endpoint/i, /xss/i, /sql/i],
-	pwn: [/\bpwn\b/i, /heap/i, /stack/i, /rop/i, /elf/i, /binary exploitation/i],
-	reverse: [/reverse/i, /reversing/i, /decompile/i, /disassembl/i, /apk/i],
+	pwn: [/\bpwn\b/i, /heap/i, /stack/i, /rop/i, /binary exploitation/i, /memory corruption/i],
+	reverse: [/reverse/i, /reversing/i, /decompile/i, /disassembl/i, /apk/i, /crackme/i],
 	crypto: [/crypto/i, /cipher/i, /rsa/i, /aes/i, /ecc/i, /modular/i],
 	forensics: [/forensic/i, /pcap/i, /memory dump/i, /disk image/i, /stegan/i, /metadata/i],
 	misc: [/\bmisc\b/i, /puzzle/i, /encoding/i],

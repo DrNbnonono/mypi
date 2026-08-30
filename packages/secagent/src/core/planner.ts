@@ -12,12 +12,12 @@ import type {
 } from "./types.ts";
 
 const WEIGHTS = {
-	goalRelevance: 0.32,
-	informationGain: 0.28,
+	goalRelevance: 0.3,
+	informationGain: 0.27,
 	confidence: 0.18,
 	risk: 0.1,
 	cost: 0.05,
-	novelty: 0.04,
+	novelty: 0.07,
 	budget: 0.03,
 } as const;
 
