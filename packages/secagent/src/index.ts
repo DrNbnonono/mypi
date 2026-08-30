@@ -1,6 +1,7 @@
 export * from "./agents/control-plane.ts";
 export * from "./core/audit.ts";
 export * from "./core/budget.ts";
+export * from "./core/candidate-generator.ts";
 export * from "./core/capability-coverage.ts";
 export * from "./core/evidence-graph.ts";
 export * from "./core/observer.ts";
@@ -12,6 +13,7 @@ export * from "./core/types.ts";
 export * from "./core/verifier.ts";
 export * from "./ctf/capabilities.ts";
 export * from "./extension-benchmark.ts";
+export * from "./extension-candidates.ts";
 export * from "./extension-competition.ts";
 export * from "./extension-delegation.ts";
 export * from "./extension-scope-guard.ts";

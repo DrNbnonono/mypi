@@ -1,6 +1,7 @@
 import type { InlineExtension } from "@earendil-works/pi-coding-agent";
 import type { SecuritySessionStore } from "./core/state.ts";
 import { createSecAgentBenchmarkExtension } from "./extension-benchmark.ts";
+import { createSecAgentCandidateExtension } from "./extension-candidates.ts";
 import { createSecAgentCompetitionExtension } from "./extension-competition.ts";
 import { createSecAgentDelegationExtension } from "./extension-delegation.ts";
 import { createSecAgentScopeGuardExtension } from "./extension-scope-guard.ts";
@@ -12,11 +13,7 @@ import { SECAGENT_RUNTIME_PACKAGE_SOURCES } from "./runtime-packages.ts";
 
 export interface CreateSecAgentProfileOptions { runtimePackageSources?: readonly string[]; }
 interface SecAgentProfileRuntime { snapshot(): unknown; command(command: unknown): unknown; subscribe(listener: (snapshot: unknown) => void): () => void; }
-interface SecAgentProfileDefinition {
-	mode: "sec"; displayName: string; resourcePaths: { extensionPaths: string[] };
-	createRuntime(context: { sessionManager: SecuritySessionStore }): SecAgentProfileRuntime;
-	createExtensions(): InlineExtension[];
-}
+interface SecAgentProfileDefinition { mode: "sec"; displayName: string; resourcePaths: { extensionPaths: string[] }; createRuntime(context: { sessionManager: SecuritySessionStore }): SecAgentProfileRuntime; createExtensions(): InlineExtension[]; }
 export function createSecAgentProfile(options: CreateSecAgentProfileOptions = {}): SecAgentProfileDefinition {
 	let runtime: SecAgentRuntime | undefined;
 	const runtimePackageSources = options.runtimePackageSources ?? SECAGENT_RUNTIME_PACKAGE_SOURCES;
@@ -31,6 +28,7 @@ export function createSecAgentProfile(options: CreateSecAgentProfileOptions = {}
 			return [
 				createSecAgentScopeGuardExtension(runtime),
 				createSecAgentExtension(runtime),
+				createSecAgentCandidateExtension(runtime),
 				createSecAgentCompetitionExtension(runtime),
 				createSecAgentStaticAnalysisExtension(runtime),
 				createSecAgentWebAnalysisExtension(runtime),
