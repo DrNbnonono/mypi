@@ -2195,6 +2195,9 @@ function SessionItem({
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
                 {title}
               </span>
+			  <span style={{ flexShrink: 0, padding: "0 4px", borderRadius: 4, border: "1px solid var(--border)", color: session.agentMode === "sec" ? "#b45309" : "var(--text-dim)", fontSize: 9, lineHeight: 1.5 }}>
+				{session.agentMode === "sec" ? "SEC" : "CODE"}
+			  </span>
             </div>
             <div style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 8, color: "var(--text-dim)", fontSize: 11, minWidth: 0 }}>
               {isRunning ? (

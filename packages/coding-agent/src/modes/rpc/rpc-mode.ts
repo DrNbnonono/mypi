@@ -431,7 +431,10 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			}
 
 			case "new_session": {
-				const options = command.parentSession ? { parentSession: command.parentSession } : undefined;
+				const options =
+					command.parentSession || command.agentMode
+						? { parentSession: command.parentSession, agentMode: command.agentMode }
+						: undefined;
 				const result = await runtimeHost.newSession(options);
 				if (!result.cancelled) {
 					await rebindSession();
@@ -457,6 +460,8 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 					autoCompactionEnabled: session.autoCompactionEnabled,
 					messageCount: session.messages.length,
 					pendingMessageCount: session.pendingMessageCount,
+					agentMode: session.agentMode,
+					profileState: session.profileRuntime?.snapshot(),
 				};
 				return success(id, "get_state", state);
 			}

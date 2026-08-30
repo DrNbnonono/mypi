@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { resolvePath } from "../utils/paths.ts";
+import type { AgentMode } from "./agent-profile.ts";
 import type { AgentSession } from "./agent-session.ts";
 import type { AgentSessionRuntimeDiagnostic, AgentSessionServices } from "./agent-session-services.ts";
 import type {
@@ -225,6 +226,7 @@ export class AgentSessionRuntime {
 
 	async newSession(options?: {
 		parentSession?: string;
+		agentMode?: AgentMode;
 		setup?: (sessionManager: SessionManager) => Promise<void>;
 		withSession?: (ctx: ReplacedSessionContext) => Promise<void>;
 	}): Promise<{ cancelled: boolean }> {
@@ -236,10 +238,13 @@ export class AgentSessionRuntime {
 		const previousSessionFile = this.session.sessionFile;
 		const sessionDir = this.session.sessionManager.getSessionDir();
 		const sessionManager = this.session.sessionManager.isPersisted()
-			? SessionManager.create(this.cwd, sessionDir)
-			: SessionManager.inMemory(this.cwd);
+			? SessionManager.create(this.cwd, sessionDir, { agentMode: options?.agentMode ?? this.session.agentMode })
+			: SessionManager.inMemory(this.cwd, { agentMode: options?.agentMode ?? this.session.agentMode });
 		if (options?.parentSession) {
-			sessionManager.newSession({ parentSession: options.parentSession });
+			sessionManager.newSession({
+				parentSession: options.parentSession,
+				agentMode: options.agentMode ?? this.session.agentMode,
+			});
 		}
 
 		await this.teardownCurrent("new", sessionManager.getSessionFile());
@@ -294,8 +299,8 @@ export class AgentSessionRuntime {
 			}
 			const sessionDir = this.session.sessionManager.getSessionDir();
 			if (!targetLeafId) {
-				const sessionManager = SessionManager.create(this.cwd, sessionDir);
-				sessionManager.newSession({ parentSession: currentSessionFile });
+				const sessionManager = SessionManager.create(this.cwd, sessionDir, { agentMode: this.session.agentMode });
+				sessionManager.newSession({ parentSession: currentSessionFile, agentMode: this.session.agentMode });
 				await this.teardownCurrent("fork", sessionManager.getSessionFile());
 				this.apply(
 					await this.createRuntime({
@@ -334,7 +339,7 @@ export class AgentSessionRuntime {
 
 		const sessionManager = this.session.sessionManager;
 		if (!targetLeafId) {
-			sessionManager.newSession({ parentSession: this.session.sessionFile });
+			sessionManager.newSession({ parentSession: this.session.sessionFile, agentMode: this.session.agentMode });
 		} else {
 			sessionManager.createBranchedSession(targetLeafId);
 		}

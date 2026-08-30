@@ -19,6 +19,7 @@ import { createInterface } from "readline";
 import { StringDecoder } from "string_decoder";
 import { APP_NAME, getAgentDir as getDefaultAgentDir, getSessionsDir } from "../config.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
+import type { AgentMode } from "./agent-profile.ts";
 import {
 	type BashExecutionMessage,
 	type CustomMessage,
@@ -36,11 +37,13 @@ export interface SessionHeader {
 	timestamp: string;
 	cwd: string;
 	parentSession?: string;
+	agentMode?: AgentMode;
 }
 
 export interface NewSessionOptions {
 	id?: string;
 	parentSession?: string;
+	agentMode?: AgentMode;
 }
 
 export interface SessionEntryBase {
@@ -180,6 +183,7 @@ export interface SessionInfo {
 	name?: string;
 	/** Path to the parent session (if this session was forked). */
 	parentSessionPath?: string;
+	agentMode?: AgentMode;
 	created: Date;
 	modified: Date;
 	messageCount: number;
@@ -753,6 +757,7 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 			cwd,
 			name,
 			parentSessionPath,
+			agentMode: header.agentMode === "sec" ? "sec" : "coding",
 			created: new Date(header.timestamp),
 			modified,
 			messageCount,
@@ -940,6 +945,7 @@ export class SessionManager {
 			timestamp,
 			cwd: this.cwd,
 			parentSession: options?.parentSession,
+			agentMode: options?.agentMode ?? "coding",
 		};
 		this.fileEntries = [header];
 		this.byId.clear();
@@ -1010,6 +1016,10 @@ export class SessionManager {
 
 	getSessionFile(): string | undefined {
 		return this.sessionFile;
+	}
+
+	getAgentMode(): AgentMode {
+		return this.getHeader()?.agentMode === "sec" ? "sec" : "coding";
 	}
 
 	_persist(entry: SessionEntry): void {
@@ -1440,6 +1450,7 @@ export class SessionManager {
 			timestamp,
 			cwd: this.cwd,
 			parentSession: this.persist ? previousSessionFile : undefined,
+			agentMode: this.getAgentMode(),
 		};
 
 		// Collect labels for entries in the path
@@ -1617,6 +1628,7 @@ export class SessionManager {
 			timestamp,
 			cwd: resolvedTargetCwd,
 			parentSession: resolvedSourcePath,
+			agentMode: sourceHeader.agentMode === "sec" ? "sec" : "coding",
 		};
 		writeFileSync(newSessionFile, `${JSON.stringify(newHeader)}\n`, { flag: "wx" });
 

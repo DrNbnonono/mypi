@@ -3,6 +3,12 @@ import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
 import { getAgentDir } from "../config.ts";
 import { resolvePath } from "../utils/paths.ts";
+import {
+	type AgentMode,
+	type AgentProfileInstance,
+	assertAgentModeCompatible,
+	createAgentProfile,
+} from "./agent-profile.ts";
 import type { SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
 import { ModelRuntime } from "./model-runtime.ts";
 import {
@@ -12,7 +18,7 @@ import {
 	type ResourceLoaderReloadOptions,
 } from "./resource-loader.ts";
 import { type CreateAgentSessionOptions, type CreateAgentSessionResult, createAgentSession } from "./sdk.ts";
-import type { SessionManager } from "./session-manager.ts";
+import { SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
 
 /**
@@ -36,6 +42,8 @@ export interface AgentSessionRuntimeDiagnostic {
  */
 export interface CreateAgentSessionServicesOptions {
 	cwd: string;
+	sessionManager?: SessionManager;
+	agentMode?: AgentMode;
 	agentDir?: string;
 	settingsManager?: SettingsManager;
 	modelRuntime?: ModelRuntime;
@@ -77,6 +85,7 @@ export interface AgentSessionServices {
 	settingsManager: SettingsManager;
 	resourceLoader: ResourceLoader;
 	diagnostics: AgentSessionRuntimeDiagnostic[];
+	profile: AgentProfileInstance;
 }
 
 function applyExtensionFlagValues(
@@ -145,11 +154,33 @@ export async function createAgentSessionServices(
 			signal: options.modelRuntimeSignal,
 		}));
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
+	const agentMode = options.sessionManager
+		? assertAgentModeCompatible(options.sessionManager, options.agentMode)
+		: (options.agentMode ?? "coding");
+	if (agentMode === "sec" && !options.sessionManager)
+		throw new Error("SecAgent services require the target SessionManager");
+	const profileSessionManager = options.sessionManager ?? SessionManager.inMemory(cwd, { agentMode });
+	const profile = createAgentProfile(agentMode, { cwd, sessionManager: profileSessionManager });
+	const profileResources = profile.definition.resourcePaths;
+	const requestedResources = options.resourceLoaderOptions ?? {};
 	const resourceLoader = new DefaultResourceLoader({
-		...(options.resourceLoaderOptions ?? {}),
+		...requestedResources,
 		cwd,
 		agentDir,
 		settingsManager,
+		additionalExtensionPaths: [
+			...(profileResources?.extensionPaths ?? []),
+			...(requestedResources.additionalExtensionPaths ?? []),
+		],
+		additionalSkillPaths: [
+			...(profileResources?.skillPaths ?? []),
+			...(requestedResources.additionalSkillPaths ?? []),
+		],
+		additionalPromptTemplatePaths: [
+			...(profileResources?.promptTemplatePaths ?? []),
+			...(requestedResources.additionalPromptTemplatePaths ?? []),
+		],
+		extensionFactories: [...profile.definition.createExtensions(), ...(requestedResources.extensionFactories ?? [])],
 	});
 	await resourceLoader.reload(options.resourceLoaderReloadOptions);
 
@@ -189,6 +220,7 @@ export async function createAgentSessionServices(
 		settingsManager,
 		resourceLoader,
 		diagnostics,
+		profile,
 	};
 }
 
@@ -208,6 +240,8 @@ export async function createAgentSessionFromServices(
 		modelRuntime: options.services.modelRuntime,
 		settingsManager: options.services.settingsManager,
 		resourceLoader: options.services.resourceLoader,
+		agentMode: options.services.profile.definition.mode,
+		profile: options.services.profile,
 		sessionManager: options.sessionManager,
 		model: options.model,
 		thinkingLevel: options.thinkingLevel,

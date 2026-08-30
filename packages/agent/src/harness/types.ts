@@ -2,6 +2,7 @@ import type { SimpleStreamOptions, Transport } from "@earendil-works/pi-ai";
 import type { Static, TSchema } from "typebox";
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "../types.ts";
 
+// 导出的类型和函数
 /** Result of a fallible operation. Expected failures are returned as `ok: false` instead of thrown. */
 export type Result<TValue, TError> = { ok: true; value: TValue } | { ok: false; error: TError };
 

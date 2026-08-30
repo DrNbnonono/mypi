@@ -1,4 +1,6 @@
 import type {
+	AgentMode,
+	AgentProfileRuntime,
   AgentSessionEvent,
   BashOperations,
   SessionManager,
@@ -119,6 +121,8 @@ export interface ExtensionUiContextLike {
 }
 
 export interface AgentSessionLike {
+	readonly agentMode: AgentMode;
+	readonly profileRuntime: AgentProfileRuntime | undefined;
   readonly sessionId: string;
   readonly sessionFile: string | undefined;
   readonly isStreaming: boolean;

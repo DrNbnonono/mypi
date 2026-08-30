@@ -1,5 +1,5 @@
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
-import { createAgentSessionFromServices, createAgentSessionServices, getAgentDir, initTheme, SessionManager, SettingsManager, Theme } from "@earendil-works/pi-coding-agent";
+import { assertAgentModeCompatible, createAgentSessionFromServices, createAgentSessionServices, getAgentDir, initTheme, SessionManager, SettingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import { KeybindingsManager as TuiKeybindingsManager, TUI_KEYBINDINGS } from "@earendil-works/pi-tui";
 import { randomUUID } from "crypto";
 import { existsSync, realpathSync, writeFileSync } from "fs";
@@ -15,7 +15,7 @@ import {
 import { cacheSessionPath, invalidateSessionListCache } from "./session-reader";
 import { getProjectTrustStatus, projectTrustReloadOptions } from "./project-trust";
 import { persistExplicitStartupPreferences } from "./startup-preferences";
-import type { SlashCommandInfo } from "@earendil-works/pi-coding-agent";
+import type { AgentMode, SlashCommandInfo } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionLike, ExtensionUiContextLike, ToolInfo } from "./pi-types";
 import type {
   ExtensionUiRequest,
@@ -80,7 +80,7 @@ type ExtensionUiRequestBody = Record<string, unknown> & {
 
 type ExtensionCommandContextActionsLike = {
   waitForIdle: () => Promise<void>;
-  newSession: () => Promise<{ cancelled: boolean }>;
+  newSession: (options?: { agentMode?: AgentMode }) => Promise<{ cancelled: boolean }>;
   fork: () => Promise<{ cancelled: boolean }>;
   navigateTree: (targetId: string, options?: { summarize?: boolean }) => Promise<{ cancelled: boolean }>;
   switchSession: () => Promise<{ cancelled: boolean }>;
@@ -109,6 +109,7 @@ const IDLE_RESET_EVENT_TYPES = new Set([
 ]);
 
 export interface RpcSessionStartOptions {
+	agentMode?: AgentMode;
   toolNames?: string[];
   initialModel?: { provider: string; modelId: string };
   thinkingLevel?: ThinkingLevel;
@@ -178,6 +179,7 @@ export class AgentSessionWrapper {
   private extensionBindingError: unknown = null;
   private forceEmptySystemPrompt = false;
   private unsubscribe: (() => void) | null = null;
+	private profileUnsubscribe: (() => void) | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private onDestroyCallback: (() => void) | null = null;
   private shutdownPromise: Promise<void> | null = null;
@@ -196,6 +198,10 @@ export class AgentSessionWrapper {
   get cwd(): string {
     return this.inner.sessionManager.getCwd();
   }
+
+	get agentMode(): AgentMode {
+		return this.inner.agentMode;
+	}
 
   get streamingMessage() {
     return this.inner.agent.state?.streamingMessage;
@@ -222,6 +228,9 @@ export class AgentSessionWrapper {
       this.emit(event);
       if (RUNNING_STATE_EVENT_TYPES.has(event.type)) notifyRunningChange();
     });
+	this.profileUnsubscribe = this.inner.profileRuntime?.subscribe((snapshot) => {
+		this.emit({ type: "profile_state", agentMode: this.agentMode, profileState: snapshot });
+	}) ?? null;
     this.resetIdleTimer();
     notifyRunningChange();
   }
@@ -528,8 +537,18 @@ export class AgentSessionWrapper {
           thinkingLevel: this.inner.agent.state?.thinkingLevel ?? "off",
           extensionStatuses: this.getExtensionStatuses(),
           extensionWidgets: this.getExtensionWidgets(),
+		  agentMode: this.agentMode,
+		  profileState: this.inner.profileRuntime?.snapshot(),
         };
       }
+
+	  case "profile_snapshot":
+		return this.inner.profileRuntime?.snapshot() ?? null;
+
+	  case "profile_command": {
+		if (!this.inner.profileRuntime) throw new Error(`Session mode ${this.agentMode} has no profile runtime`);
+		return this.inner.profileRuntime.command(command.command);
+	  }
 
       case "set_model": {
         const { provider, modelId } = command as { provider: string; modelId: string };
@@ -564,8 +583,8 @@ export class AgentSessionWrapper {
 
         if (!entry.parentId) {
           // Fork before the first message: create an empty session linked to this one
-          const newManager = SessionManager.create(sessionManager.getCwd(), sessionDir);
-          newManager.newSession({ parentSession: currentSessionFile });
+		  const newManager = SessionManager.create(sessionManager.getCwd(), sessionDir, { agentMode: this.agentMode });
+		  newManager.newSession({ parentSession: currentSessionFile, agentMode: this.agentMode });
           newSessionFile = newManager.getSessionFile() as string;
         } else {
           // Fork after some history: copy path up to (but not including) the fork point
@@ -778,6 +797,7 @@ export class AgentSessionWrapper {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     if (this.inner.isBashRunning) this.inner.abortBash();
     this.unsubscribe?.();
+	this.profileUnsubscribe?.();
     for (const pending of this.pendingUiResponses.values()) pending.cancel();
     for (const id of Array.from(this.activeCustomUis.keys())) this.closeCustomUi(id, undefined);
     this.pendingUiResponses.clear();
@@ -1480,6 +1500,7 @@ export function getRpcSessionInfos(): SessionInfo[] {
       messageCount: messages.length,
       firstMessage: firstUserMessage ? runtimeMessageText(firstUserMessage) || "(no messages)" : "(no messages)",
       transient: !persisted,
+	  agentMode: session.agentMode,
     });
   }
   return sessions;
@@ -1567,7 +1588,7 @@ export async function startRpcSession(
   cwd: string | undefined,
   options: RpcSessionStartOptions = {},
 ): Promise<{ session: AgentSessionWrapper; realSessionId: string }> {
-  const { toolNames, initialModel, thinkingLevel } = options;
+	const { agentMode, toolNames, initialModel, thinkingLevel } = options;
   const registry = getRegistry();
   const locks = getLocks();
 
@@ -1580,9 +1601,10 @@ export async function startRpcSession(
   let sessionManager: SessionManager;
   if (sessionFile) {
     sessionManager = SessionManager.open(sessionFile, undefined);
+	assertAgentModeCompatible(sessionManager, agentMode);
   } else {
     if (!cwd) throw new Error("cwd is required for a new session");
-    sessionManager = SessionManager.create(cwd, undefined);
+	sessionManager = SessionManager.create(cwd, undefined, { agentMode });
   }
   const sessionCwd = sessionManager.getCwd();
   const finishStartingSession = trackStartingSession(sessionCwd);
@@ -1614,6 +1636,8 @@ export async function startRpcSession(
     const services = await createAgentSessionServices({
       cwd: sessionCwd,
       agentDir,
+	  sessionManager,
+	  ...(agentMode ? { agentMode } : {}),
       settingsManager,
       resourceLoaderOptions: {
         extensionFactories: [

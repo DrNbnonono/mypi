@@ -5,6 +5,7 @@
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import chalk from "chalk";
 import { APP_NAME, CONFIG_DIR_NAME, ENV_AGENT_DIR, ENV_SESSION_DIR } from "../config.ts";
+import type { AgentMode } from "../core/agent-profile.ts";
 import type { ExtensionFlag } from "../core/extensions/types.ts";
 import type { TuiMode } from "../core/settings-manager.ts";
 
@@ -22,6 +23,9 @@ export interface Args {
 	help?: boolean;
 	version?: boolean;
 	mode?: Mode;
+	agentMode?: AgentMode;
+	secIsolation?: string;
+	secAutonomousConfirm?: string;
 	name?: string;
 	noSession?: boolean;
 	session?: string;
@@ -97,6 +101,18 @@ export function parseArgs(args: string[]): Args {
 			if (mode === "text" || mode === "json" || mode === "rpc") {
 				result.mode = mode;
 			}
+		} else if (arg === "--agent-mode" && i + 1 < args.length) {
+			const mode = args[++i];
+			if (mode === "coding" || mode === "sec") result.agentMode = mode;
+			else
+				result.diagnostics.push({
+					type: "error",
+					message: `Invalid agent mode "${mode}". Valid values: coding, sec`,
+				});
+		} else if (arg === "--sec-isolation" && i + 1 < args.length) {
+			result.secIsolation = args[++i];
+		} else if (arg === "--sec-autonomous-confirm" && i + 1 < args.length) {
+			result.secAutonomousConfirm = args[++i];
 		} else if (arg === "--continue" || arg === "-c") {
 			result.continue = true;
 		} else if (arg === "--resume" || arg === "-r") {
@@ -281,6 +297,9 @@ ${chalk.bold("Options:")}
   --system-prompt <text>         System prompt (default: coding assistant prompt)
   --append-system-prompt <text>  Append text or file contents to the system prompt (can be used multiple times)
   --mode <mode>                  Output mode: text (default), json, or rpc
+  --agent-mode <mode>            Agent profile: coding (default) or sec
+  --sec-isolation <source>       Controlled isolation marker for non-interactive autonomous sec mode
+  --sec-autonomous-confirm <v>   Must equal I_ACCEPT_AUTONOMOUS_SECURITY_RISK
   --print, -p                    Non-interactive mode: process prompt and exit
   --continue, -c                 Continue previous session
   --resume, -r                   Select a session to resume

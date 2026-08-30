@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import { allowFileRoot } from "@/lib/file-access";
 import { invalidateSessionListCache } from "@/lib/session-reader";
 import { startRpcSession } from "@/lib/rpc-manager";
+import type { AgentMode } from "@earendil-works/pi-coding-agent";
 
 const THINKING_LEVELS = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
@@ -14,6 +15,12 @@ function parseThinkingLevel(value: unknown): ThinkingLevel | undefined {
     return value as ThinkingLevel;
   }
   throw new Error(`Invalid thinking level: ${String(value)}`);
+}
+
+function parseAgentMode(value: unknown): AgentMode {
+	if (value === undefined || value === "coding") return "coding";
+	if (value === "sec") return "sec";
+	throw new Error(`Invalid agent mode: ${String(value)}`);
 }
 // POST /api/agent/new  body: { cwd: string; type: string; message?: string; ... }
 // Spawns a brand-new pi session. Most calls immediately send the first command;
@@ -45,7 +52,8 @@ export async function POST(req: Request) {
     }
 
     // Use a one-time key so startRpcSession's lock doesn't conflict with real session ids
-    const { provider, modelId, toolNames, thinkingLevel, ...promptCommand } = command as { provider?: string; modelId?: string; toolNames?: string[]; thinkingLevel?: unknown; [key: string]: unknown };
+	const { provider, modelId, toolNames, thinkingLevel, agentMode: rawAgentMode, ...promptCommand } = command as { provider?: string; modelId?: string; toolNames?: string[]; thinkingLevel?: unknown; agentMode?: unknown; [key: string]: unknown };
+	const agentMode = parseAgentMode(rawAgentMode);
     if ((provider && !modelId) || (!provider && modelId)) {
       throw new Error("provider and modelId must be provided together");
     }
@@ -59,6 +67,7 @@ export async function POST(req: Request) {
       ...(toolNames ? { toolNames } : {}),
       ...(provider && modelId ? { initialModel: { provider, modelId } } : {}),
       ...(explicitThinkingLevel ? { thinkingLevel: explicitThinkingLevel } : {}),
+	  agentMode,
     });
 
     // Keep the files-route allowed-roots cache (see app/api/files/[...path]/route.ts)
@@ -81,6 +90,7 @@ export async function POST(req: Request) {
           ? { provider: state.model.provider, modelId: state.model.id }
           : null,
         thinkingLevel: state.thinkingLevel,
+		agentMode,
       });
     }
 
@@ -95,6 +105,7 @@ export async function POST(req: Request) {
         ? { provider: state.model.provider, modelId: state.model.id }
         : null,
       thinkingLevel: state.thinkingLevel,
+	  agentMode,
     });
   } catch (error) {
     return NextResponse.json({

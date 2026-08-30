@@ -7,6 +7,7 @@ export interface SessionHeader {
   timestamp: string;
   cwd: string;
   parentSession?: string;
+	agentMode?: "coding" | "sec";
 }
 
 export interface SessionEntryBase {
@@ -318,6 +319,8 @@ export interface SessionInfo {
   /** True while the runtime session exists only in memory and its JSONL file
    *  has not been created yet. Disk-backed actions must wait until this clears. */
   transient?: boolean;
+	/** Session profile. Headers written before dual-mode support default to coding. */
+	agentMode?: "coding" | "sec";
 }
 
 export interface SessionContext {

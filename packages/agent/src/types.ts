@@ -154,6 +154,7 @@ export interface AgentLoopTurnUpdate {
 
 export interface PrepareNextTurnContext extends ShouldStopAfterTurnContext {}
 
+// 低层 Loop 的行为配置：消息转换、动态 API key、队列读取、工具 hook、回合结束策略和工具并发模式。
 export interface AgentLoopConfig extends SimpleStreamOptions {
 	model: Model<any>;
 
@@ -235,13 +236,15 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 *
 	 * Contract: must not throw or reject. Throwing interrupts the low-level agent loop without producing a normal event sequence.
 	 */
+	// 在每一轮完全完成并发出 turn_end 事件后调用
 	shouldStopAfterTurn?: (context: ShouldStopAfterTurnContext) => boolean | Promise<boolean>;
 
 	/**
-	 * Called after `turn_end` and before the loop decides whether another provider request should start.
+	 * Called after `turn_end` and before the loop decides whether another provider request should start. 是否准备下一轮
 	 * Return replacement context/model/thinking state to affect the next turn in this run.
 	 * Return undefined to keep using the current context/config.
 	 */
+	// 准备下一轮的上下文、模型和思考级别。返回 undefined 表示保持当前状态。
 	prepareNextTurn?: (
 		context: PrepareNextTurnContext,
 	) => AgentLoopTurnUpdate | undefined | Promise<AgentLoopTurnUpdate | undefined>;
@@ -257,6 +260,7 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 *
 	 * Contract: must not throw or reject. Return [] when no steering messages are available.
 	 */
+	// 在运行过程中返回要注入到对话中的转向消息。
 	getSteeringMessages?: () => Promise<AgentMessage[]>;
 
 	/**
@@ -270,6 +274,7 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 *
 	 * Contract: must not throw or reject. Return [] when no follow-up messages are available.
 	 */
+	// 在agent本应停止后返回要处理的后续消息。
 	getFollowUpMessages?: () => Promise<AgentMessage[]>;
 
 	/**
@@ -281,6 +286,7 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 *
 	 * Default: "parallel"
 	 */
+	// 工具执行模式。默认是并行执行。
 	toolExecution?: ToolExecutionMode;
 
 	/**
@@ -290,6 +296,7 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * A blocked result can also set `terminate: true` to participate in the batch early-termination rule.
 	 * The hook receives the agent abort signal and is responsible for honoring it.
 	 */
+	// 在工具执行之前调用，在参数验证之后。
 	beforeToolCall?: (context: BeforeToolCallContext, signal?: AbortSignal) => Promise<BeforeToolCallResult | undefined>;
 
 	/**
@@ -305,6 +312,7 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * Any omitted fields keep their original values. No deep merge is performed.
 	 * The hook receives the agent abort signal and is responsible for honoring it.
 	 */
+	// 在工具执行完成后调用，在 `tool_execution_end` 和工具结果消息事件发出之前。
 	afterToolCall?: (context: AfterToolCallContext, signal?: AbortSignal) => Promise<AfterToolCallResult | undefined>;
 }
 
@@ -376,6 +384,7 @@ export interface AgentState {
 	/** Error message from the most recent failed or aborted assistant turn, if any. */
 	readonly errorMessage?: string;
 }
+
 // 最终的工具调用结果
 /** Final or partial result produced by a tool. */
 export interface AgentToolResult<T> {

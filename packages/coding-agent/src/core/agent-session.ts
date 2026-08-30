@@ -51,6 +51,12 @@ import { stripFrontmatter } from "../utils/frontmatter.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { sleep } from "../utils/sleep.ts";
 import { normalizeToolResultImages } from "../utils/tool-result-images.ts";
+import {
+	type AgentMode,
+	type AgentProfileInstance,
+	type AgentProfileRuntime,
+	createAgentProfile,
+} from "./agent-profile.ts";
 import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth-guidance.ts";
 import { type BashResult, executeBashWithOperations } from "./bash-executor.ts";
 import {
@@ -227,6 +233,8 @@ export interface AgentSessionConfig {
 	extensionRunnerRef?: { current?: ExtensionRunner };
 	/** Session start event metadata emitted when extensions bind to this runtime. */
 	sessionStartEvent?: SessionStartEvent;
+	/** Session-scoped behavior and resources. */
+	profile?: AgentProfileInstance;
 }
 
 export interface ExtensionBindings {
@@ -367,6 +375,7 @@ export class AgentSession {
 	private _extensionErrorUnsubscriber?: () => void;
 
 	private _modelRuntime: ModelRuntime;
+	private readonly _profile: AgentProfileInstance;
 
 	// Tool registry for extension getTools/setTools
 	private _toolRegistry: Map<string, AgentTool> = new Map();
@@ -394,6 +403,12 @@ export class AgentSession {
 		this._excludedToolNames = config.excludedToolNames ? new Set(config.excludedToolNames) : undefined;
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
+		this._profile =
+			config.profile ??
+			createAgentProfile(config.sessionManager.getAgentMode(), {
+				cwd: config.cwd,
+				sessionManager: config.sessionManager,
+			});
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -985,6 +1000,18 @@ export class AgentSession {
 	/** Current session ID */
 	get sessionId(): string {
 		return this.sessionManager.getSessionId();
+	}
+
+	get agentMode(): AgentMode {
+		return this._profile.definition.mode;
+	}
+
+	get profile(): Readonly<AgentProfileInstance> {
+		return this._profile;
+	}
+
+	get profileRuntime(): AgentProfileRuntime | undefined {
+		return this._profile.runtime;
 	}
 
 	/** Current session display name, if set */
@@ -3389,6 +3416,7 @@ export class AgentSession {
 			id: this.sessionManager.getSessionId(),
 			timestamp: new Date().toISOString(),
 			cwd: this.sessionManager.getCwd(),
+			agentMode: this.agentMode,
 		};
 
 		const branchEntries = this.sessionManager.getBranch();

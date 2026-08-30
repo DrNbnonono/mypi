@@ -125,6 +125,20 @@ describe("parseArgs", () => {
 			expect(result.mode).toBe("rpc");
 		});
 
+		test("parses --agent-mode independently from output mode", () => {
+			const result = parseArgs(["--agent-mode", "sec", "--mode", "rpc"]);
+			expect(result.agentMode).toBe("sec");
+			expect(result.mode).toBe("rpc");
+		});
+
+		test("rejects invalid --agent-mode values", () => {
+			const result = parseArgs(["--agent-mode", "autonomous"]);
+			expect(result.diagnostics).toContainEqual({
+				type: "error",
+				message: 'Invalid agent mode "autonomous". Valid values: coding, sec',
+			});
+		});
+
 		test("parses --session", () => {
 			const result = parseArgs(["--session", "/path/to/session.jsonl"]);
 			expect(result.session).toBe("/path/to/session.jsonl");

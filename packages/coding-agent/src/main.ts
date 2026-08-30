@@ -33,6 +33,7 @@ import { createProjectTrustContext } from "./cli/project-trust.ts";
 import { selectSession } from "./cli/session-picker.ts";
 import { shouldRunFirstTimeSetup, showFirstTimeSetup, showStartupSelector } from "./cli/startup-ui.ts";
 import { APP_NAME, ENV_SESSION_DIR, expandTildePath, getAgentDir, getPackageDir, VERSION } from "./config.ts";
+import { assertAgentModeCompatible } from "./core/agent-profile.ts";
 import { type CreateAgentSessionRuntimeFactory, createAgentSessionRuntime } from "./core/agent-session-runtime.ts";
 import {
 	type AgentSessionRuntimeDiagnostic,
@@ -355,7 +356,7 @@ export async function createSessionManager(
 	settingsManager: SettingsManager,
 ): Promise<SessionManager> {
 	if (parsed.noSession || parsed.help || parsed.listModels !== undefined) {
-		return SessionManager.inMemory(cwd, parsed.sessionId !== undefined ? { id: parsed.sessionId } : undefined);
+		return SessionManager.inMemory(cwd, { id: parsed.sessionId, agentMode: parsed.agentMode });
 	}
 
 	if (parsed.fork) {
@@ -438,7 +439,7 @@ export async function createSessionManager(
 		);
 	}
 
-	return SessionManager.create(cwd, sessionDir, { id: parsed.sessionId });
+	return SessionManager.create(cwd, sessionDir, { id: parsed.sessionId, agentMode: parsed.agentMode });
 }
 
 function buildSessionOptions(
@@ -671,6 +672,12 @@ export async function main(args: string[], options?: MainOptions) {
 		(envSessionDir ? expandTildePath(envSessionDir) : undefined) ??
 		startupSettingsManager.getSessionDir();
 	let sessionManager = await createSessionManager(parsed, cwd, sessionDir, startupSettingsManager);
+	try {
+		assertAgentModeCompatible(sessionManager, parsed.agentMode);
+	} catch (error) {
+		console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
+		process.exit(1);
+	}
 	const missingSessionCwdIssue = getMissingSessionCwdIssue(sessionManager, cwd);
 	if (missingSessionCwdIssue) {
 		if (appMode === "interactive") {
@@ -728,6 +735,7 @@ export async function main(args: string[], options?: MainOptions) {
 		const runtimeSettingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted });
 		const services = await createAgentSessionServices({
 			cwd,
+			sessionManager,
 			agentDir,
 			settingsManager: runtimeSettingsManager,
 			modelRuntimeSignal: AbortSignal.timeout(15_000),
@@ -842,6 +850,44 @@ export async function main(args: string[], options?: MainOptions) {
 	});
 	time("createAgentSessionRuntime");
 	const { services, session, modelFallbackMessage } = runtime;
+	if (parsed.secIsolation !== undefined || parsed.secAutonomousConfirm !== undefined) {
+		if (session.agentMode !== "sec") {
+			console.error(chalk.red("Error: --sec-isolation and --sec-autonomous-confirm require --agent-mode sec"));
+			process.exit(1);
+		}
+		if (!parsed.secIsolation || parsed.secAutonomousConfirm !== "I_ACCEPT_AUTONOMOUS_SECURITY_RISK") {
+			console.error(
+				chalk.red(
+					"Error: non-interactive autonomous mode requires --sec-isolation and --sec-autonomous-confirm I_ACCEPT_AUTONOMOUS_SECURITY_RISK",
+				),
+			);
+			process.exit(1);
+		}
+		const confirmedAt = new Date().toISOString();
+		await session.profileRuntime?.command({
+			type: "set_isolation",
+			isolation: {
+				status: parsed.secIsolation === "pi-sandbox" ? "sandbox" : "external",
+				source: parsed.secIsolation,
+				verifiedAt: confirmedAt,
+			},
+		});
+		await session.profileRuntime?.command({
+			type: "authorize_autonomous",
+			authorization: {
+				operator: "cli-noninteractive",
+				reason: "fixed CLI acknowledgement",
+				isolationSource: parsed.secIsolation,
+				confirmedAt,
+			},
+		});
+		await session.profileRuntime?.command({
+			type: "set_policy",
+			mode: "autonomous",
+			operator: "cli-noninteractive",
+			reason: "fixed CLI acknowledgement",
+		});
+	}
 	const { settingsManager, modelRuntime, resourceLoader } = services;
 	applyHttpProxySettings(settingsManager.getGlobalSettings().httpProxy);
 	configureHttpDispatcher(settingsManager.getHttpIdleTimeoutMs());

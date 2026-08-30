@@ -15,6 +15,17 @@ export {
 	VERSION,
 } from "./config.ts";
 export {
+	type AgentMode,
+	type AgentProfileContext,
+	type AgentProfileDefinition,
+	type AgentProfileInstance,
+	type AgentProfileRuntime,
+	assertAgentModeCompatible,
+	createAgentProfile,
+	getStoredAgentMode,
+	type ProfileResourcePaths,
+} from "./core/agent-profile.ts";
+export {
 	AgentSession,
 	type AgentSessionConfig,
 	type AgentSessionEvent,

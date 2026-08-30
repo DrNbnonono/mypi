@@ -63,6 +63,7 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
       firstMessage: s.firstMessage || "(no messages)",
       parentSessionId: s.parentSessionPath ? pathToId.get(sessionPathKey(s.parentSessionPath)) : undefined,
       transient: false,
+		agentMode: s.agentMode ?? "coding",
     };
   });
   return attachSessionProjectInfo(sessions);

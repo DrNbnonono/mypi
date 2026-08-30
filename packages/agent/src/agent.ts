@@ -71,7 +71,7 @@ type MutableAgentState = Omit<AgentState, "isStreaming" | "streamingMessage" | "
 	errorMessage?: string;
 };
 
-// 创建可变的代理状态
+// 创建可变的Agent状态
 function createMutableAgentState(
 	initialState?: Partial<Omit<AgentState, "pendingToolCalls" | "isStreaming" | "streamingMessage" | "errorMessage">>,
 ): MutableAgentState {
@@ -102,6 +102,7 @@ function createMutableAgentState(
 }
 
 /** Options for constructing an {@link Agent}. */
+// AgentOptions 类型定义
 export interface AgentOptions {
 	initialState?: Partial<Omit<AgentState, "pendingToolCalls" | "isStreaming" | "streamingMessage" | "errorMessage">>;
 	convertToLlm?: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
@@ -178,6 +179,7 @@ type ActiveRun = {
  *
  * `Agent` owns the current transcript, emits lifecycle events, executes tools,
  * and exposes queueing APIs for steering and follow-up messages.
+ * Agent 类入口
  */
 export class Agent {
 	// 这是有状态外壳：它持有 transcript、队列和运行时状态，并把每次低层 loop
@@ -224,9 +226,11 @@ export class Agent {
 	/** Tool execution strategy for assistant messages that contain multiple tool calls. */
 	public toolExecution: ToolExecutionMode;
 
+	// 这个是构造函数，主要是把参数存入实例属性，并创建初始状态和队列。
 	constructor(options: AgentOptions) {
+		// 参数后面写：类型
 		// Older compiled consumers may omit options or streamFn even though the current API requires them.
-		const runtimeOptions: Partial<AgentOptions> = options ?? {};
+		const runtimeOptions: Partial<AgentOptions> = options ?? {}; // 工具类型，Partial<AgentOptions> 是 TS 内置的高级类型。它会把 AgentOptions 里的所有属性都变成可选的（加上 ?）
 		// 构造阶段只组装依赖和默认策略，不发起模型请求；请求从 prompt/continue 开始。
 		this._state = createMutableAgentState(runtimeOptions.initialState);
 		this.convertToLlm = runtimeOptions.convertToLlm ?? defaultConvertToLlm;
@@ -258,6 +262,7 @@ export class Agent {
 	 *
 	 * `agent_end` is the final emitted event for a run, but the agent does not
 	 * become idle until all awaited listeners for that event have settled.
+	 * 订阅 agent 生命周期事件
 	 */
 	subscribe(listener: (event: AgentEvent, signal: AbortSignal) => Promise<void> | void): () => void {
 		this.listeners.add(listener);
@@ -341,6 +346,7 @@ export class Agent {
 		return this.activeRun?.promise ?? Promise.resolve();
 	}
 
+	// 重置 agent的状态，清空消息队列和运行时状态
 	/** Clear transcript state, runtime state, and queued messages. */
 	reset(): void {
 		if (this.activeRun) {
@@ -371,6 +377,7 @@ export class Agent {
 	}
 
 	/** Continue from the current transcript. The last message must be a user or tool-result message. */
+	// continue 方法用于从当前的对话记录继续对话。它会检查当前是否有正在进行的运行，如果有，则抛出错误。然后，它会检查最后一条消息的角色，如果是用户或工具结果消息，则调用 runContinuation 方法继续对话。如果最后一条消息是助手消息，则会尝试从队列中获取排队的 steering 或 follow-up 消息，并运行它们。如果没有可用的排队消息，则抛出错误。
 	async continue(): Promise<void> {
 		if (this.activeRun) {
 			throw new Error("Agent is already processing. Wait for completion before continuing.");
@@ -402,6 +409,7 @@ export class Agent {
 		await this.runContinuation();
 	}
 
+	// normalizePromptInput 方法用于将输入的消息或文本转换为 AgentMessage 数组。它接受一个字符串、单个 AgentMessage 或 AgentMessage 数组作为输入。如果输入是数组，则直接返回该数组。如果输入是单个 AgentMessage，则将其包装在数组中返回。如果输入是字符串，则创建一个新的用户消息，并将其包装在数组中返回。如果提供了图像内容，则将其添加到用户消息的内容中。
 	private normalizePromptInput(
 		input: string | AgentMessage | AgentMessage[],
 		images?: ImageContent[],
@@ -437,6 +445,7 @@ export class Agent {
 		});
 	}
 
+	// runContinuation 方法用于继续当前的对话循环。它会调用 runWithLifecycle 方法，并传入一个异步函数，该函数会调用 runAgentLoopContinue 方法，传入当前的上下文快照、循环配置、事件处理函数、取消信号和流式函数。这样可以在当前对话的基础上继续进行交互。
 	private async runContinuation(): Promise<void> {
 		await this.runWithLifecycle(async (signal) => {
 			await runAgentLoopContinue(
@@ -448,7 +457,7 @@ export class Agent {
 			);
 		});
 	}
-
+	// createContextSnapshot 方法用于创建当前 agent 状态的快照。它会复制系统提示、消息和工具的数组，以确保在后续操作中不会修改原始数据。
 	private createContextSnapshot(): AgentContext {
 		// 只复制顶层数组：loop 可以在自己的上下文中追加消息，但不会改写 Agent
 		// 当前持有的数组；数组内的消息对象仍按事件流逐步替换。
@@ -459,6 +468,7 @@ export class Agent {
 		};
 	}
 
+	// createLoopConfig 方法用于创建一个用于运行 agent loop 的配置对象。它会将 agent 的状态和回调函数映射为一个配置对象，以便在低层 loop 中使用。
 	private createLoopConfig(options: { skipInitialSteeringPoll?: boolean } = {}): AgentLoopConfig {
 		// 将有状态 Agent 的字段映射为一次低层 loop 的配置，并通过闭包把队列、
 		// hook 和动态 API key 接回当前实例。
@@ -502,6 +512,7 @@ export class Agent {
 		};
 	}
 
+	// runWithLifecycle 方法用于执行一个异步操作，并在执行期间管理 agent 的生命周期状态。它会检查是否有正在进行的运行，如果有，则抛出错误。然后，它会创建一个新的 AbortController，用于取消当前运行。接着，它会设置 agent 的状态为正在流式传输，并清空当前的流式消息和错误消息。最后，它会调用传入的 executor 函数，并在执行完成后处理可能的错误，并清理运行状态。
 	private async runWithLifecycle(executor: (signal: AbortSignal) => Promise<void>): Promise<void> {
 		if (this.activeRun) {
 			throw new Error("Agent is already processing.");
@@ -528,6 +539,7 @@ export class Agent {
 		}
 	}
 
+	// handleRunFailure 方法用于处理运行期间的失败情况。它会创建一个表示失败的助手消息，并将其发送到事件处理流程中，以便通知所有监听器。然后，它会调用 processEvents 方法，依次触发消息开始、消息结束、回合结束和代理结束事件，确保所有相关状态和事件都被正确处理。
 	private async handleRunFailure(error: unknown, aborted: boolean): Promise<void> {
 		const failureMessage = {
 			role: "assistant",
@@ -546,6 +558,7 @@ export class Agent {
 		await this.processEvents({ type: "agent_end", messages: [failureMessage] });
 	}
 
+	// finishRun 方法用于完成当前的运行。它会将 agent 的状态设置为非流式传输，并清空当前的流式消息和错误消息。然后，它会解决当前的 Promise，并将 activeRun 设置为 undefined。
 	private finishRun(): void {
 		this._state.isStreaming = false;
 		this._state.streamingMessage = undefined;

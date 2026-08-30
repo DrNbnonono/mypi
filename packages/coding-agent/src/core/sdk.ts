@@ -3,6 +3,12 @@ import { Agent, type AgentMessage, setDefaultStreamFn, type ThinkingLevel } from
 import { clampThinkingLevel, type Message, type Model, streamSimple } from "@earendil-works/pi-ai/compat";
 import { getAgentDir } from "../config.ts";
 import { resolvePath } from "../utils/paths.ts";
+import {
+	type AgentMode,
+	type AgentProfileInstance,
+	assertAgentModeCompatible,
+	createAgentProfile,
+} from "./agent-profile.ts";
 import { AgentSession } from "./agent-session.ts";
 import { formatNoModelsAvailableMessage } from "./auth-guidance.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
@@ -40,6 +46,10 @@ export interface CreateAgentSessionOptions {
 	cwd?: string;
 	/** Global config directory. Default: ~/.pi/agent */
 	agentDir?: string;
+	/** Session profile. Defaults to the persisted mode, or coding for new sessions. */
+	agentMode?: AgentMode;
+	/** Pre-created profile used by AgentSessionServices. */
+	profile?: AgentProfileInstance;
 
 	/** Canonical model/auth runtime. Defaults to a runtime using agentDir/auth.json and models.json. */
 	modelRuntime?: ModelRuntime;
@@ -180,10 +190,24 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const modelRuntime = options.modelRuntime ?? (await ModelRuntime.create({ authPath, modelsPath }));
 
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
-	const sessionManager = options.sessionManager ?? SessionManager.create(cwd, getDefaultSessionDir(cwd, agentDir));
+	const sessionManager =
+		options.sessionManager ??
+		SessionManager.create(cwd, getDefaultSessionDir(cwd, agentDir), { agentMode: options.agentMode });
+	const agentMode = assertAgentModeCompatible(sessionManager, options.agentMode);
+	const profile = options.profile ?? createAgentProfile(agentMode, { cwd, sessionManager });
+	if (profile.definition.mode !== agentMode)
+		throw new Error(`Profile mode ${profile.definition.mode} does not match session mode ${agentMode}`);
 
 	if (!resourceLoader) {
-		resourceLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
+		resourceLoader = new DefaultResourceLoader({
+			cwd,
+			agentDir,
+			settingsManager,
+			additionalExtensionPaths: profile.definition.resourcePaths?.extensionPaths,
+			additionalSkillPaths: profile.definition.resourcePaths?.skillPaths,
+			additionalPromptTemplatePaths: profile.definition.resourcePaths?.promptTemplatePaths,
+			extensionFactories: profile.definition.createExtensions(),
+		});
 		await resourceLoader.reload();
 		time("resourceLoader.reload");
 	}
@@ -401,6 +425,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		excludedToolNames,
 		extensionRunnerRef,
 		sessionStartEvent: options.sessionStartEvent,
+		profile,
 	});
 	const extensionsResult = resourceLoader.getExtensions();
 

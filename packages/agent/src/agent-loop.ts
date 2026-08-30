@@ -20,14 +20,15 @@ import type {
 	AgentToolCall,
 	AgentToolResult,
 	StreamFn,
-} from "./types.ts";
+} from "./types.ts"; // 从这个文件导入类型定义
 
-export type AgentEventSink = (event: AgentEvent) => Promise<void> | void;
+export type AgentEventSink = (event: AgentEvent) => Promise<void> | void; // 事件接收器类型定义
 
 /**
  * Start an agent loop with a new prompt message.
  * The prompt is added to the context and events are emitted for it.
  */
+// 带有新提示消息的agent循环。提示被添加到上下文中，并为其发出事件。
 export function agentLoop(
 	prompts: AgentMessage[],
 	context: AgentContext,
@@ -56,13 +57,15 @@ export function agentLoop(
 }
 
 /**
- * Continue an agent loop from the current context without adding a new message.
+ * Continue an agent loop from the current context without adding a new message. 从现有上下文继续循环，不添加新消息。
  * Used for retries - context already has user message or tool results.
  *
- * **Important:** The last message in context must convert to a `user` or `toolResult` message
+ * **Important:** The last message in context must convert to a `user` or `toolResult` message 重要： 上下文中的最后一条消息必须转换为 `user` 或 `toolResult` 消息，以便 `convertToLlm` 正确处理。
  * via `convertToLlm`. If it doesn't, the LLM provider will reject the request.
  * This cannot be validated here since `convertToLlm` is only called once per turn.
  */
+// 复用已有上下文继续循环，不添加新消息。用于重试 - 上下文中已经有用户消息或工具结果。
+// 工具结果需要在上下文中添加，以便 `convertToLlm` 正确处理。
 export function agentLoopContinue(
 	context: AgentContext,
 	config: AgentLoopConfig,
@@ -96,28 +99,31 @@ export function agentLoopContinue(
 	return stream;
 }
 
+// 运行一个完整的 agent 循环，处理 prompts、上下文、配置、事件发射器和信号。
 export async function runAgentLoop(
+	// async 关键字让函数自动返回 Promise（与前面的 : Promise<...> 呼应）。
 	prompts: AgentMessage[],
 	context: AgentContext,
 	config: AgentLoopConfig,
 	emit: AgentEventSink,
-	signal: AbortSignal | undefined,
+	signal: AbortSignal | undefined, // 联合类型
 	streamFn: StreamFn,
 ): Promise<AgentMessage[]> {
 	const newMessages: AgentMessage[] = [...prompts];
 	const currentContext: AgentContext = {
 		...context,
 		messages: [...context.messages, ...prompts],
-	};
+	}; // ... 是 ES6 的展开运算符，TS 会自动推断展开后的类型。这里 TS 能严格检查：currentContext 必须符合 AgentContext 结构，且 messages 属性必须是 AgentMessage[] 类型。
 
 	await emit({ type: "agent_start" });
-	await emit({ type: "turn_start" });
+	await emit({ type: "turn_start" }); // await emit(...) 时，TS 会检查 emit 函数（AgentEventSink 类型）是否返回一个 Promise 或 thenable 对象。
+
 	for (const prompt of prompts) {
 		await emit({ type: "message_start", message: prompt });
 		await emit({ type: "message_end", message: prompt });
 	}
 
-	await runLoop(currentContext, newMessages, config, signal, emit, streamFn ?? getDefaultStreamFn());
+	await runLoop(currentContext, newMessages, config, signal, emit, streamFn ?? getDefaultStreamFn()); // 如果 streamFn 是 null 或 undefined，就用右边的默认函数。比 || 更安全（因为 || 会把 0 或 "" 也当成假值）。
 	return newMessages;
 }
 
@@ -146,6 +152,7 @@ export async function runAgentLoopContinue(
 	return newMessages;
 }
 
+// 创建一个用于处理 agent 事件的流。
 function createAgentStream(): EventStream<AgentEvent, AgentMessage[]> {
 	return new EventStream<AgentEvent, AgentMessage[]>(
 		(event: AgentEvent) => event.type === "agent_end",
@@ -156,6 +163,7 @@ function createAgentStream(): EventStream<AgentEvent, AgentMessage[]> {
 /**
  * Main loop logic shared by agentLoop and agentLoopContinue.
  */
+// 运行循环，一共有两层，比较简单
 async function runLoop(
 	initialContext: AgentContext,
 	newMessages: AgentMessage[],
@@ -173,18 +181,20 @@ async function runLoop(
 	let pendingMessages: AgentMessage[] = (await config.getSteeringMessages?.()) || [];
 
 	// 外层循环：Agent 原本要停止时，如果有 follow-up，就重新进入内层循环。
+	// follow-up 是“如果 Agent 正常结束后还有新任务，再开一轮”，因此要在内层循环结束后由外层检查。
 	while (true) {
 		let hasMoreToolCalls = true;
 
 		// 内层循环：先处理工具调用，再检查 steering，直到当前回合没有后续工作。
+		// steering 是对当前运行的即时干预，应该在下一次 assistant 请求前进入内层循环。
 		while (hasMoreToolCalls || pendingMessages.length > 0) {
 			if (!firstTurn) {
 				await emit({ type: "turn_start" });
 			} else {
 				firstTurn = false;
-			}
+			} // 第一轮的话，已经在 runAgentLoop 或 runAgentLoopContinue 里发过 turn_start 事件了，不需要重复发。
 
-			// Process pending messages (inject before next assistant response)
+			// Process pending messages (inject before next assistant response) 处理待处理消息（在下一次助手响应之前注入）
 			if (pendingMessages.length > 0) {
 				for (const message of pendingMessages) {
 					await emit({ type: "message_start", message });
@@ -195,10 +205,11 @@ async function runLoop(
 				pendingMessages = [];
 			}
 
-			// Stream assistant response
+			// Stream assistant response 流式处理助手响应。这里是 Agent 与 LLM 的核心边界：先整理 AgentMessage，再转换为统一 Message，交给 streamFunction；返回的 AssistantMessage 随事件流写回上下文。
 			const message = await streamAssistantResponse(currentContext, config, signal, emit, streamFunction);
 			newMessages.push(message);
 
+			// Check for stop reasons 检查停止原因
 			if (message.stopReason === "error" || message.stopReason === "aborted") {
 				await emit({ type: "turn_end", message, toolResults: [] });
 				await emit({ type: "agent_end", messages: newMessages });
@@ -214,6 +225,7 @@ async function runLoop(
 				// A "length" stop means the output was cut off by the token limit, so
 				// every tool call in the message may carry truncated arguments. Fail
 				// them all instead of executing potentially borked calls.
+				// "length" 停止意味着输出被令牌限制截断，因此消息中的每个工具调用都可能携带截断的参数。失败它们所有，而不是执行可能损坏的调用。
 				const executedToolBatch =
 					message.stopReason === "length"
 						? await failToolCallsFromTruncatedMessage(toolCalls, emit)
@@ -221,6 +233,7 @@ async function runLoop(
 				toolResults.push(...executedToolBatch.messages);
 				hasMoreToolCalls = !executedToolBatch.terminate;
 
+				// 将工具结果写回上下文和新消息列表，以便下一轮循环可以处理它们。
 				for (const result of toolResults) {
 					currentContext.messages.push(result);
 					newMessages.push(result);
@@ -229,6 +242,7 @@ async function runLoop(
 
 			await emit({ type: "turn_end", message, toolResults });
 
+			// 检查是否需要在当前回合结束后准备下一轮循环。prepareNextTurn 可以返回一个新的上下文和配置，或者不返回任何内容以继续使用当前的上下文和配置。
 			const nextTurnContext = {
 				message,
 				toolResults,
@@ -236,6 +250,7 @@ async function runLoop(
 				newMessages,
 			};
 			const nextTurnSnapshot = await config.prepareNextTurn?.(nextTurnContext);
+			// 如果 prepareNextTurn 返回了一个新的上下文或配置，就更新 currentContext 和 config，以便下一轮循环使用新的上下文和配置。
 			if (nextTurnSnapshot) {
 				currentContext = nextTurnSnapshot.context ?? currentContext;
 				config = {
@@ -250,6 +265,7 @@ async function runLoop(
 				};
 			}
 
+			// 检查是否停止
 			if (
 				await config.shouldStopAfterTurn?.({
 					message,
@@ -262,13 +278,13 @@ async function runLoop(
 				return;
 			}
 
-			pendingMessages = (await config.getSteeringMessages?.()) || [];
+			pendingMessages = (await config.getSteeringMessages?.()) || []; // 检查是否有新的 steering 消息需要处理。如果有，就在下一轮循环中处理它们。
 		}
 
 		// Agent would stop here. Check for follow-up messages.
 		const followUpMessages = (await config.getFollowUpMessages?.()) || [];
 		if (followUpMessages.length > 0) {
-			// Set as pending so inner loop processes them
+			// Set as pending so inner loop processes them 设置为待处理消息，以便内部循环处理它们
 			pendingMessages = followUpMessages;
 			continue;
 		}
@@ -283,6 +299,7 @@ async function runLoop(
 /**
  * Stream an assistant response from the LLM.
  * This is where AgentMessage[] gets transformed to Message[] for the LLM.
+ * 该函数将 AgentMessage[] 转换为 Message[]，并将其传递给 LLM 进行流式处理。返回的 AssistantMessage 会随事件流写回上下文。
  */
 async function streamAssistantResponse(
 	context: AgentContext,
@@ -322,6 +339,7 @@ async function streamAssistantResponse(
 	let partialMessage: AssistantMessage | null = null;
 	let addedPartial = false;
 
+	// 根据 LLM 的事件流，逐步更新 partialMessage，并发出 message_update 事件；最终得到完整的 AssistantMessage。
 	for await (const event of response) {
 		switch (event.type) {
 			case "start":
@@ -385,6 +403,7 @@ async function streamAssistantResponse(
  * best-effort JSON salvage parser, so a truncated message can yield tool calls
  * whose arguments parse and validate but are silently incomplete. None of them
  * are safe to execute; report each as an error so the model can re-issue them.
+ * 工具调用失败以后，agent的消息被截断。需要注意的是，流式工具调用参数是通过尽力而为的 JSON 修复解析器来完成的，因此截断的消息可能会产生解析和验证通过但实际上不完整的工具调用。它们都不安全执行；将每个工具调用报告为错误，以便模型可以重新发出它们。
  */
 async function failToolCallsFromTruncatedMessage(
 	toolCalls: AgentToolCall[],
@@ -418,6 +437,7 @@ async function failToolCallsFromTruncatedMessage(
 /**
  * Execute tool calls from an assistant message.
  */
+// 工具调用
 async function executeToolCalls(
 	currentContext: AgentContext,
 	assistantMessage: AssistantMessage,
@@ -437,11 +457,13 @@ async function executeToolCalls(
 	return executeToolCallsParallel(currentContext, assistantMessage, toolCalls, config, signal, emit);
 }
 
+// 执行工具调用批次
 type ExecutedToolCallBatch = {
 	messages: ToolResultMessage[];
 	terminate: boolean;
 };
 
+// 执行顺序工具调用
 async function executeToolCallsSequential(
 	currentContext: AgentContext,
 	assistantMessage: AssistantMessage,
@@ -453,6 +475,7 @@ async function executeToolCallsSequential(
 	const finalizedCalls: FinalizedToolCallOutcome[] = [];
 	const messages: ToolResultMessage[] = [];
 
+	// 逐个执行工具调用，发出 tool_execution_start、tool_execution_end 和 toolResultMessage 事件，并将结果写回上下文和新消息列表。
 	for (const toolCall of toolCalls) {
 		await emit({
 			type: "tool_execution_start",
@@ -498,6 +521,7 @@ async function executeToolCallsSequential(
 	};
 }
 
+// 执行并行工具调用
 async function executeToolCallsParallel(
 	currentContext: AgentContext,
 	assistantMessage: AssistantMessage,
@@ -518,6 +542,7 @@ async function executeToolCallsParallel(
 			args: toolCall.arguments,
 		});
 
+		// 准备工具调用参数，可能返回立即失败的结果（如工具不存在、参数验证失败、beforeToolCall 阻断等），也可能返回准备好的工具调用。
 		const preparation = await prepareToolCall(currentContext, assistantMessage, toolCall, config, signal);
 		if (preparation.kind === "immediate") {
 			const finalized = {
@@ -533,6 +558,7 @@ async function executeToolCallsParallel(
 			continue;
 		}
 
+		// 这里是并行执行的关键：将每个工具调用的执行和最终化封装为一个异步函数，推入 finalizedCalls 数组。稍后使用 Promise.all 并发执行这些函数，并按完成顺序发出 tool_execution_end 事件。
 		finalizedCalls.push(async () => {
 			const executed = await executePreparedToolCall(preparation, signal, emit);
 			const finalized = await finalizeExecutedToolCall(
@@ -551,6 +577,7 @@ async function executeToolCallsParallel(
 		}
 	}
 
+	// 并行执行所有工具调用，并按完成顺序发出 tool_execution_end 事件。最终将结果按原始调用顺序写回上下文和新消息列表。
 	const orderedFinalizedCalls = await Promise.all(
 		finalizedCalls.map((entry) => (typeof entry === "function" ? entry() : Promise.resolve(entry))),
 	);
@@ -566,25 +593,25 @@ async function executeToolCallsParallel(
 		terminate: shouldTerminateToolBatch(orderedFinalizedCalls),
 	};
 }
-
+// 准备好的工具调用
 type PreparedToolCall = {
 	kind: "prepared";
 	toolCall: AgentToolCall;
 	tool: AgentTool<any>;
 	args: unknown;
 };
-
+// 立即返回的工具调用结果
 type ImmediateToolCallOutcome = {
 	kind: "immediate";
 	result: AgentToolResult<any>;
 	isError: boolean;
 };
-
+// 执行好的工具调用结果
 type ExecutedToolCallOutcome = {
 	result: AgentToolResult<any>;
 	isError: boolean;
 };
-
+// 最终化的工具调用结果
 type FinalizedToolCallOutcome = {
 	toolCall: AgentToolCall;
 	result: AgentToolResult<any>;
@@ -592,11 +619,11 @@ type FinalizedToolCallOutcome = {
 };
 
 type FinalizedToolCallEntry = FinalizedToolCallOutcome | (() => Promise<FinalizedToolCallOutcome>);
-
+// 判断工具调用批次是否应该终止
 function shouldTerminateToolBatch(finalizedCalls: FinalizedToolCallOutcome[]): boolean {
 	return finalizedCalls.length > 0 && finalizedCalls.every((finalized) => finalized.result.terminate === true);
 }
-
+// 准备工具调用参数
 function prepareToolCallArguments(tool: AgentTool<any>, toolCall: AgentToolCall): AgentToolCall {
 	if (!tool.prepareArguments) {
 		return toolCall;
@@ -610,7 +637,7 @@ function prepareToolCallArguments(tool: AgentTool<any>, toolCall: AgentToolCall)
 		arguments: preparedArguments as Record<string, any>,
 	};
 }
-
+// 创建工具结果消息
 async function prepareToolCall(
 	currentContext: AgentContext,
 	assistantMessage: AssistantMessage,
@@ -632,6 +659,7 @@ async function prepareToolCall(
 	try {
 		const preparedToolCall = prepareToolCallArguments(tool, toolCall);
 		const validatedArgs = validateToolArguments(tool, preparedToolCall);
+		// beforeToolCall 可以阻断工具调用，返回一个 reason 字符串和一个 terminate 布尔值，表示是否终止整个批次。
 		if (config.beforeToolCall) {
 			const beforeResult = await config.beforeToolCall(
 				{
@@ -682,7 +710,7 @@ async function prepareToolCall(
 		};
 	}
 }
-
+// 执行准备好的工具调用
 async function executePreparedToolCall(
 	prepared: PreparedToolCall,
 	signal: AbortSignal | undefined,
@@ -725,7 +753,7 @@ async function executePreparedToolCall(
 		acceptingUpdates = false;
 	}
 }
-
+// 最终化执行好的工具调用
 async function finalizeExecutedToolCall(
 	currentContext: AgentContext,
 	assistantMessage: AssistantMessage,
@@ -772,14 +800,14 @@ async function finalizeExecutedToolCall(
 		isError,
 	};
 }
-
+// 工具调用失败时创建错误结果
 function createErrorToolResult(message: string): AgentToolResult<any> {
 	return {
 		content: [{ type: "text", text: message }],
 		details: {},
 	};
 }
-
+// 发出工具调用结束事件
 async function emitToolExecutionEnd(finalized: FinalizedToolCallOutcome, emit: AgentEventSink): Promise<void> {
 	await emit({
 		type: "tool_execution_end",
@@ -789,7 +817,7 @@ async function emitToolExecutionEnd(finalized: FinalizedToolCallOutcome, emit: A
 		isError: finalized.isError,
 	});
 }
-
+// 创建工具结果消息
 function createToolResultMessage(finalized: FinalizedToolCallOutcome): ToolResultMessage {
 	return {
 		role: "toolResult",

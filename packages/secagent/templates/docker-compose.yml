@@ -1,0 +1,18 @@
+services:
+  pi-secagent:
+    build:
+      context: ../../..
+      dockerfile: packages/secagent/templates/Dockerfile
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    volumes:
+      - ${SECAGENT_WORKSPACE:-.}:/workspace:rw
+      - ${SECAGENT_TOOLS:-./tools}:/opt/security-tools:ro
+    working_dir: /workspace
+    environment:
+      PI_OFFLINE: ${PI_OFFLINE:-0}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

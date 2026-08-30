@@ -1,0 +1,17 @@
+{
+	"enabled": true,
+	"allowBrowserProcess": false,
+	"network": {
+		"allowLocalBinding": false,
+		"allowAllUnixSockets": false,
+		"allowUnauthenticatedSocksProxy": false,
+		"allowedDomains": [],
+		"deniedDomains": []
+	},
+	"filesystem": {
+		"denyRead": ["~/.ssh", "~/.aws", "~/.gnupg", "~/.config/gcloud"],
+		"allowRead": [".", "/tmp"],
+		"allowWrite": [".", "/tmp"],
+		"denyWrite": [".git", ".env", ".env.*", "*.pem", "*.key", "*.p12", "*.pfx"]
+	}
+}

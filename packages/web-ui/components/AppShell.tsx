@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useGlobalKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { SessionSidebar } from "./SessionSidebar";
 import { ChatWindow } from "./ChatWindow";
+import { SecAgentWorkspace } from "./SecAgentWorkspace";
 import { FileViewer } from "./FileViewer";
 import { TabBar, type Tab } from "./TabBar";
 import { openFileTab, saveFileViewerState } from "./file-tab-state";
@@ -50,6 +51,7 @@ import type { ProjectTrustStatus } from "@/lib/api-types";
 import type { ChatInputHandle } from "./ChatInput";
 import type { SessionStatsInfo } from "@/lib/pi-types";
 import type { FileViewerState } from "@/lib/file-viewer-state";
+import { getPreferredAgentMode, setPreferredAgentMode, type AgentMode } from "@/lib/agent-mode";
 
 type SessionCopyField = "file" | "id";
 type AutoNameStatus =
@@ -80,6 +82,8 @@ export function AppShell() {
     if (soundEnabledRef.current) playDoneSound();
   }, [playDoneSound, soundEnabledRef]);
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
+	const [newSessionAgentMode, setNewSessionAgentMode] = useState<AgentMode>("coding");
+	useEffect(() => setNewSessionAgentMode(getPreferredAgentMode()), []);
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(() => new Set());
   const handleRunningSessionIdsChange = useCallback((ids: Set<string>) => {
     setRunningSessionIds((previous) => {
@@ -569,6 +573,9 @@ export function AppShell() {
       }
     }
     setNewSessionCwd(null);
+	const mode = session.agentMode ?? "coding";
+	setNewSessionAgentMode(mode);
+	setPreferredAgentMode(mode);
     setSelectedSession(session);
     setSessionKey((k) => k + 1);
     setSystemPrompt(null);
@@ -604,6 +611,14 @@ export function AppShell() {
     if (isMobile) setSidebarOpen(false);
     router.replace("/", { scroll: false });
   }, [invalidateWorkspaceRestore, router, isMobile]);
+
+	const handleAgentModeChange = useCallback((mode: AgentMode) => {
+		if (mode === newSessionAgentMode && (selectedSession?.agentMode ?? mode) === mode) return;
+		setPreferredAgentMode(mode);
+		setNewSessionAgentMode(mode);
+		const cwd = selectedSession?.cwd ?? newSessionCwd ?? activeCwd;
+		if (cwd) handleNewSession(`mode-${mode}-${Date.now()}`, cwd);
+	}, [activeCwd, handleNewSession, newSessionAgentMode, newSessionCwd, selectedSession]);
 
   // Global keyboard shortcuts (handles Esc, Ctrl+Alt+N etc.)
   useGlobalKeyboardShortcuts({
@@ -1722,6 +1737,13 @@ export function AppShell() {
               </svg>
             )}
           </button>
+		  <label style={{ display: "flex", alignItems: "center", gap: 5, padding: "0 8px", borderRight: "1px solid var(--border)", height: "100%", color: "var(--text-muted)", fontSize: 11 }}>
+			<span>Agent</span>
+			<select aria-label="Agent mode" value={selectedSession?.agentMode ?? newSessionAgentMode} onChange={(event) => handleAgentModeChange(event.target.value as AgentMode)} style={{ background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 4, fontSize: 11 }}>
+				<option value="coding">Coding</option>
+				<option value="sec">Sec</option>
+			</select>
+		  </label>
           {isMobile && (
             <div
               ref={mobileToolbarRef}
@@ -2074,6 +2096,7 @@ export function AppShell() {
         </div>
         {isMobile && renderProjectTrustWarning(true)}
         </div>
+		{(selectedSession?.agentMode ?? newSessionAgentMode) === "sec" && <SecAgentWorkspace sessionId={selectedSession?.id ?? null} />}
 
         {/* Chat content */}
         <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
@@ -2083,6 +2106,7 @@ export function AppShell() {
               session={selectedSession}
               sessionRunning={Boolean(selectedSession && runningSessionIds.has(selectedSession.id))}
               newSessionCwd={effectiveNewSessionCwd}
+			  newSessionAgentMode={newSessionAgentMode}
               newSessionDraftKey={newSessionDraftKey}
               onAgentEnd={handleAgentEnd}
               onAttentionNeeded={handleAttentionNeeded}
