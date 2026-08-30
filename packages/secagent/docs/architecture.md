@@ -4,27 +4,11 @@
 
 SecAgent is a cybersecurity profile on top of Pi, not a fork of the low-level agent loop.
 
-Pi continues to own generic infrastructure:
+Pi continues to own generic infrastructure: model/provider abstraction, the Agent loop and tool-call lifecycle, `AgentSession` persistence and session trees, extension loading, UI requests, and coding-mode behavior.
 
-- model/provider abstraction through `pi-ai`;
-- the Agent loop and tool-call lifecycle;
-- `AgentSession` persistence and session trees;
-- extension loading and UI requests;
-- coding-mode behavior.
+`@earendil-works/pi-secagent` owns security-specific semantics: structured task intake, authorization scope, event-sourced security state, Candidate Generator, Planner/Replanner, Evidence Graph and Verifier, Observer supervision, P0-P3 policy, autonomous authorization, security tool adapters/gateway, specialist-agent control, MCP policy translation, audit/replay, controlled benchmarks, and reports.
 
-`@earendil-works/pi-secagent` owns security-specific semantics:
-
-- structured task intake;
-- explicit authorization scope;
-- security state and evidence;
-- candidate decision scoring and re-planning state;
-- P0-P3 policy and autonomous authorization;
-- security tool metadata/adapters/gateway;
-- specialist-agent definitions;
-- MCP policy translation;
-- audit, replay, and reports.
-
-The package deliberately does not modify the underlying Agent loop. Security behavior is composed through the Agent Profile, inline extensions, tools, hooks, and replayable Session entries.
+Security behavior is composed through the Agent Profile, inline extensions, registered tools/hooks, and replayable Session entries. The underlying Pi Agent loop is not modified.
 
 ## 2. Coding/Sec profile boundary
 
@@ -38,17 +22,17 @@ coding session
 sec session
   -> SecAgent profile
   -> SecAgentRuntime
-  -> SecAgent extension
+  -> security extensions
   -> sec-only runtime packages
 ```
 
-The default remains `coding`. Old sessions without an `agentMode` are interpreted as coding sessions. Requesting a mode that conflicts with the persisted Session mode is an error; `/agent-mode coding|sec` creates a new blank session in the same working directory instead of rewriting history.
+The default remains `coding`. Old sessions without `agentMode` are interpreted as coding sessions. `/agent-mode coding|sec` creates a new blank session in the same working directory rather than rewriting existing history.
 
-`SecAgentRuntime` is the single stateful bridge used by the profile extension and external clients. CLI/Web code consumes `snapshot()`, `command()`, and `subscribe()` instead of parsing security Session entries directly.
+`SecAgentRuntime` is the single stateful bridge. CLI/Web code consumes `snapshot()`, `command()`, and `subscribe()` rather than parsing custom security Session entries directly.
 
 ## 3. Sec-only generic runtime packages
 
-SecAgent reuses mature Pi packages rather than reimplementing generic infrastructure. The pinned package sources are defined in `src/runtime-packages.ts` and loaded by the Sec profile through ResourceLoader temporary extension sources:
+SecAgent reuses mature Pi packages and pins them in `src/runtime-packages.ts`:
 
 ```text
 pi-sandbox@0.6.3
@@ -57,21 +41,19 @@ pi-subagents@0.50.0
 pi-trace-extension@0.1.14
 ```
 
-They are intentionally absent from project `.pi/settings.json`. This is important: if they were normal project packages, coding sessions would load them too.
-
-Responsibilities remain separated:
+They are loaded only by the Sec profile and intentionally remain absent from project-global `.pi/settings.json`.
 
 ```text
-SecAgent policy/scope       decides whether an action is acceptable
-pi-sandbox                  enforces OS/filesystem/network isolation
-pi-mcp-adapter              provides MCP transport/discovery
-pi-subagents                provides child-session orchestration
-pi-trace-extension          records generic execution traces
+SecAgent policy/scope       semantic authorization boundary
+pi-sandbox                  OS/filesystem/network isolation
+pi-mcp-adapter              MCP transport/discovery
+pi-subagents                child-session orchestration
+pi-trace-extension          generic execution trace
 ```
 
-SecAgent audit is not replaced by Pi trace. Pi trace answers what ran and where; SecAgent audit answers why it was selected, which policy/scope applied, and what evidence or state changed.
+Pi trace answers what ran and where. SecAgent audit additionally records why the action was selected, which scope/risk policy applied, what evidence was produced, and how the security state changed.
 
-## 4. Specialist agents
+## 4. Specialist agents and capability overlays
 
 Canonical specialist definitions live in `packages/secagent/agents/`:
 
@@ -82,39 +64,67 @@ Canonical specialist definitions live in `packages/secagent/agents/`:
 - `sec-vuln`
 - `sec-reverse`
 
-The monorepo root exposes `./packages/secagent/agents` through the `pi-subagents.agents` package manifest contract. Because `pi-subagents` itself is loaded only by the Sec profile, these specialists do not alter coding-mode behavior.
+CTF is not a separate top-level agent. Web, Pwn, Reverse, Crypto, Forensics, and Misc are capability overlays. The control plane routes bounded work to the existing specialists and `pi-subagents` enforces the child-session lifecycle. Child specialists may not widen scope, authorization, or budget.
 
-Project `.pi/agents` is no longer the canonical source and must not contain duplicated SecAgent specialists.
+Project `.pi/agents` is not the canonical source and must not duplicate these definitions.
 
-## 5. Security execution flow
+## 5. Risk-aware state-space execution
 
-The intended closed loop is:
+The core competition loop is implemented by `AutonomousSearchLoop` and exposed as `security_autonomous`:
 
 ```text
-User input / artifact
-  -> security_intake
-  -> SecurityTaskSpec
-  -> SecurityState
-  -> explicit authorized scope
-  -> plan / candidate actions
-  -> structured tool registry + adapter
-  -> risk + scope + precondition evaluation
-  -> ALLOW / CONFIRM / WARN / DENY
-  -> sandbox / MCP / CLI execution
-  -> normalized observation
-  -> audit + evidence
-  -> decision completion
-  -> re-plan when evidence, preconditions, or execution status changed
-  -> verification
-  -> confirmed finding
-  -> Markdown / JSON report
+SecurityTaskSpec
+      |
+      v
+SecurityState
+      |
+      v
+Candidate Generator
+      |
+      v
+Planner / Replanner
+      |
+      v
+deterministic action-input builder
+      |
+      v
+SecurityExecutionGateway
+      |
+      +--> Scope hard invariant
+      +--> P0-P3 Risk Policy
+      +--> Budget
+      +--> adapter preconditions
+      |
+      v
+audited Tool Adapter / MCP boundary
+      |
+      v
+normalized Evidence + provenance
+      |
+      +--> Evidence Graph / Verifier
+      +--> Observer sidecar
+      |
+      v
+termination or next state-space step
 ```
 
-The LLM proposes actions, but it is not the sole authority for risk or scope. Registry metadata provides risk floors; scope authorization is external to attachment content; policy and isolation prerequisites are deterministic runtime checks.
+The Candidate Generator derives runnable alternatives from scenario, stage, explicit scope, local artifacts, CTF capability profile, previous outcomes, and the audited adapter registry. Successful deterministic candidates are not repeated; capability families with repeated failures are exhausted so changing executable names cannot hide strategy stagnation.
 
-## 6. Persisted security model
+The deterministic action-input builder converts a selected candidate into structured adapter input. It does not expose arbitrary shell arguments. FFUF, for example, requires an explicit in-workspace wordlist asset; local binary/forensic analysis requires a regular in-workspace artifact.
 
-Security state is rebuilt from custom Session entries. The current state contains:
+The Planner scores goal relevance, information gain, confidence, risk, cost, novelty, and budget pressure. Replanning is triggered by failed/contradicted decisions, repeated capability-level failure, Observer drift/stall signals, and verification contradictions.
+
+## 6. Evidence Graph, verification, and termination
+
+A tool result is an observation, not automatically a finding. Gateway evidence records preserve decision IDs, source/tool identity, target references, and SHA-256 provenance for local artifacts where available.
+
+The Evidence Graph represents explicit support, contradiction, derivation, duplication, and verification relationships. The automatic verifier only reevaluates active hypotheses that already have graph links. It does not invent hypotheses and cannot bypass `verifiedFindingGate`.
+
+A finding is promoted only through a verified hypothesis record. The termination guard separately checks whether verified completion evidence satisfies the task objective; model prose alone cannot terminate the run as successful.
+
+## 7. Persisted security model
+
+Security state is rebuilt from custom Session entries. It includes:
 
 ```text
 SecurityTaskSpec
@@ -123,86 +133,77 @@ policyMode
 isolation
 autonomousAuthorization
 scope
-evidence
-hypotheses
-rejectedHypotheses
+evidence + Evidence Graph
+hypotheses + verifications
 findings
-decisions
+decisions + replans
+observerSignals
+delegations
+budget
+ctfProfile
 ```
 
-Important distinctions:
+A decision records candidate alternatives, selected strategy, evidence inputs, expected result, actual result, status, plan revision, retry/replan relation, and budget snapshot. Tool audit records retain risk, scope, approval state, inputs, results, warnings, and block reasons.
 
-- an observation is not automatically a confirmed finding;
-- attachment targets are not automatically authorized targets;
-- a scanner result is evidence/hypothesis input until verified;
-- a decision records candidate alternatives, evidence inputs, expected result, actual result, and completion status;
-- tool audit records retain risk, scope, approval/warning state, inputs, results, and block reasons.
+This event-sourced model supports resume, branch replay, report reconstruction, regression evaluation, and judge-facing decision traces without persisting hidden model chain-of-thought.
 
-This event-sourced design allows Session resume, branch replay, report reconstruction, and later benchmark/export tooling without depending on hidden model reasoning.
+## 8. Policy and autonomy boundary
 
-## 7. Policy modes
+Policy mode is independent of Coding/Sec Agent mode:
 
-The policy mode is independent of the Coding/Sec Agent mode:
-
-- `strict`: P2 and P3 require per-action confirmation.
-- `competition`: P2 may proceed automatically; P3 still requires confirmation.
+- `strict`: P2/P3 require per-action confirmation;
+- `competition`: P2 may proceed automatically, P3 still confirms;
 - `autonomous`: one recorded authorization replaces per-tool confirmation after isolation prerequisites are satisfied.
 
-Autonomous mode does not disable OS/container boundaries, protected credential paths, or audit. If isolation is neither verified `pi-sandbox` nor an explicitly declared controlled external environment, autonomous mode cannot be enabled.
+Autonomous mode does not disable scope enforcement, OS/container isolation, protected credential paths, budgets, or audit. A new security task resets task-specific scope and autonomous authorization so authorization cannot leak across tasks.
 
-## 8. Tool adapter boundary
+## 9. Tool adapter boundary
 
-Security tools are represented by structured metadata and adapters instead of being treated as arbitrary shell strings. An adapter can define:
+Security tools use structured metadata and adapters rather than arbitrary shell strings. Metadata defines canonical name/aliases, category, capabilities, risk floor, scope mode, preconditions/postconditions, and recommended specialist roles. Adapters define target extraction, availability diagnostics, deterministic argv construction, precondition validation, execution, and normalized evidence.
 
-- canonical name and aliases;
-- category and capabilities;
-- risk floor;
-- target extraction and scope behavior;
-- preconditions and postconditions;
-- execution/availability diagnostics;
-- normalized evidence output.
+The current bounded execution surface includes network/Web discovery and verification (`nmap`, `curl`, `httpx`, `ffuf`, `nuclei`) and local artifact analysis (`file`, `strings`, `readelf`, `objdump`, `binwalk`, `exiftool`). External scanners remain external dependencies; SecAgent coordinates, constrains, and audits them rather than reimplementing them.
 
-External scanners remain external dependencies. SecAgent coordinates and audits them; it does not reimplement Nmap, curl, MCP servers, or other mature security tooling.
+Unknown tools use conservative policy fallbacks. Compound shell calls inherit the highest relevant nested risk.
 
-Unknown tools use conservative defaults, and compound shell execution inherits the highest relevant nested risk.
+## 10. Controlled competition benchmarks
 
-## 9. Repository ownership after migration
+`src/scenarios/controlled.ts` defines five canonical scenario families:
 
-The package is now the source of truth:
+```text
+Web         -> bounded HTTP discovery and verification
+Pwn         -> hash-backed ELF/mitigation/static-analysis path
+Reverse     -> artifact triage and disassembly progression
+Forensics   -> metadata and embedded-signature analysis
+Killchain   -> multi-stage network/Web search with failure-driven replanning
+```
+
+`security_benchmark` can list the matrix and evaluate the current run against scenario-specific invariants such as scope enforcement, no repeated successful action, hash-backed artifact provenance, read-only binary analysis, no automatic extraction, capability diversity, failure-triggered replanning, and budget bounds.
+
+Deterministic CI regressions replace only the external command executor; the actual Candidate Generator, Planner, Gateway, policy/scope checks, adapters, state replay, Evidence Graph, Observer, Verifier, and Replanner are exercised. In the competition environment, the same loop can use real tools against explicitly authorized loopback/container fixtures.
+
+## 11. Repository ownership
 
 ```text
 packages/secagent/
-  agents/
-  docs/
+  agents/                 specialist definitions
+  docs/                   architecture/competition/autonomy docs
   src/
-    core/
-    intake/
-    integrations/
-    report/
-    tools/
-  templates/
-  test/
+    agents/               control plane
+    core/                 state-space decision kernel
+    ctf/                  capability profiling
+    intake/               task/artifact normalization
+    integrations/         MCP/subagent policy bridges
+    report/               report/replay output
+    scenarios/            benchmark definitions/evaluators
+    tools/                registry, gateway, adapters
+  templates/              deployment defaults
+  test/                   deterministic regression suite
 ```
 
-The repository-level `.pi` directory may keep deployment/development configuration such as `.pi/sandbox.json` and general project extensions, but it must not duplicate:
+Repository `.pi` files may keep deployment/development overrides such as sandbox settings, but must not duplicate SecAgent implementation or specialist definitions.
 
-- `.pi/secagent/**`;
-- `.pi/extensions/security-agent.ts`;
-- `.pi/extensions/security-report.ts`;
-- `.pi/agents/sec-*.md`;
-- project-global SecAgent runtime packages in `.pi/settings.json`.
+## 12. Next competition work
 
-`.mcp.json` and `.pi/sandbox.json` remain project deployment overrides; equivalent default templates are shipped under `packages/secagent/templates/`.
+The architecture and closed loop are now implemented. Remaining work should concentrate on measured capability rather than another orchestration layer: calibrate planner weights/budgets against repeated benchmark runs, add real loopback/container fixtures with installed competition tools, expand structured MCP capability acquisition, strengthen artifact and protocol-specific adapters where scenarios expose gaps, and export reproducible benchmark summaries for the final report/PPT.
 
-## 10. Next capability work
-
-After the package boundary is stable, development should move upward into competition-specific intelligence rather than more runtime plumbing:
-
-1. finish task-intake normalization for supported artifact types;
-2. evolve the current candidate scorer into an explicit plan/execute/observe/re-plan state machine;
-3. add evidence relationships and verification gates so findings are supported by traceable evidence;
-4. finish standard CLI/MCP adapter diagnostics and failure recovery;
-5. build controlled faux-provider scenario regressions for penetration testing, incident response, vulnerability research, Web security, and reverse engineering;
-6. expose the same Profile Runtime state and commands in CLI and Web without duplicating security logic.
-
-The architectural rule is simple: generic Agent infrastructure belongs to Pi or a mature Pi package; cybersecurity decision semantics belong to `@earendil-works/pi-secagent`.
+The architectural rule remains: generic Agent infrastructure belongs to Pi or mature Pi packages; cybersecurity decision semantics and evidence-driven autonomy belong to `@earendil-works/pi-secagent`.
