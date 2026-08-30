@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-import type { SecurityToolMetadata } from "../core/types.ts";
+import type { EvidenceKind, SecurityToolMetadata } from "../core/types.ts";
 import type {
 	SecurityToolAdapter,
 	SecurityToolAvailability,
@@ -40,6 +42,16 @@ export function targetValues(input: Record<string, unknown>, keys: readonly stri
 		}
 	}
 	return [...new Set(values)];
+}
+
+export function sha256File(path: string): Promise<string> {
+	return new Promise((resolveHash, rejectHash) => {
+		const hash = createHash("sha256");
+		const stream = createReadStream(path);
+		stream.on("data", (chunk) => hash.update(chunk));
+		stream.on("error", rejectHash);
+		stream.on("end", () => resolveHash(hash.digest("hex")));
+	});
 }
 
 export function commandResultOutput(
@@ -141,6 +153,7 @@ export async function runStandardTool(options: {
 	input: Record<string, unknown>;
 	context: SecurityToolExecutionContext;
 	versionArgs?: readonly string[];
+	evidence?: { kind?: EvidenceKind; sha256?: string; source?: string; targetRefs?: string[] };
 	normalize?: (output: Record<string, unknown>) => unknown;
 }): Promise<SecurityToolExecutionResult> {
 	let timeoutMs: number;
@@ -183,7 +196,14 @@ export async function runStandardTool(options: {
 				result.exitCode === 0
 					? undefined
 					: { code: "execution", message: summary, command: options.command, exitCode: result.exitCode },
-			evidence: [{ summary, source: options.command, confidence: result.exitCode === 0 ? 0.9 : 0.4 }],
+			evidence: [{
+				summary,
+				source: options.evidence?.source ?? options.command,
+				confidence: result.exitCode === 0 ? 0.9 : 0.4,
+				kind: options.evidence?.kind,
+				sha256: options.evidence?.sha256,
+				targetRefs: options.evidence?.targetRefs ?? [...options.targets],
+			}],
 		};
 	} catch (error) {
 		return diagnosticResult({

@@ -5,6 +5,7 @@ import {
 	checkLocalInput,
 	preconditionResult,
 	runStandardTool,
+	sha256File,
 	stringInput,
 } from "./standard.ts";
 
@@ -48,6 +49,12 @@ async function executeLocal(
 	} catch (error) {
 		return preconditionResult(error instanceof Error ? error.message : String(error));
 	}
+	let artifactSha256: string;
+	try {
+		artifactSha256 = await sha256File(checked.path);
+	} catch (error) {
+		return preconditionResult(`unable to hash local artifact: ${error instanceof Error ? error.message : String(error)}`);
+	}
 	return runStandardTool({
 		metadata,
 		command,
@@ -55,6 +62,7 @@ async function executeLocal(
 		targets: [checked.path],
 		input,
 		context,
+		evidence: { sha256: artifactSha256 },
 		normalize: command === "strings" ? normalizeStrings : normalizeFile,
 	});
 }
@@ -67,10 +75,7 @@ export function createFileAdapter(metadata: SecurityToolMetadata): SecurityToolA
 			return path ? [path] : [];
 		},
 		checkAvailability: (context) => checkCommandAvailability("file", context),
-		async checkPreconditions(
-			input: Record<string, unknown>,
-			context: SecurityToolExecutionContext,
-		): Promise<string[]> {
+		async checkPreconditions(input, context): Promise<string[]> {
 			const checked = await checkLocalInput(localPath(input), context);
 			return checked.diagnostic ? [checked.diagnostic.message] : [];
 		},
@@ -86,10 +91,7 @@ export function createStringsAdapter(metadata: SecurityToolMetadata): SecurityTo
 			return path ? [path] : [];
 		},
 		checkAvailability: (context) => checkCommandAvailability("strings", context),
-		async checkPreconditions(
-			input: Record<string, unknown>,
-			context: SecurityToolExecutionContext,
-		): Promise<string[]> {
+		async checkPreconditions(input, context): Promise<string[]> {
 			const checked = await checkLocalInput(localPath(input), context);
 			if (checked.diagnostic) return [checked.diagnostic.message];
 			try {

@@ -1,4 +1,4 @@
-import type { SecurityToolMetadata } from "../core/types.ts";
+import type { EvidenceKind, SecurityToolMetadata } from "../core/types.ts";
 import { getSecurityToolMetadata } from "./registry.ts";
 
 export interface SecurityToolExecutionContext {
@@ -32,11 +32,20 @@ export interface SecurityToolAvailability {
 	diagnostic?: { code: SecurityToolDiagnosticCode; message: string; command?: string; exitCode?: number | null };
 }
 
+export interface NormalizedSecurityEvidence {
+	summary: string;
+	source?: string;
+	confidence: number;
+	kind?: EvidenceKind;
+	sha256?: string;
+	targetRefs?: string[];
+}
+
 export interface SecurityToolExecutionResult {
 	ok: boolean;
 	output?: unknown;
 	diagnostic?: { code: SecurityToolDiagnosticCode; message: string; command?: string; exitCode?: number | null };
-	evidence: Array<{ summary: string; source?: string; confidence: number }>;
+	evidence: NormalizedSecurityEvidence[];
 }
 
 export interface SecurityToolAdapter {
