@@ -67,8 +67,9 @@ jobs:
       - name: Run coding-agent mode tests
         run: npm run test --workspace=@earendil-works/pi-coding-agent -- test/args.test.ts test/session-manager/agent-mode.test.ts
 
-      - name: Run Web mode tests
-        run: npm run test --workspace=@agegr/pi-web -- components/SecAgentWorkspace.test.mjs lib/agent-mode.test.mjs
+      - name: Run focused Web mode tests
+        working-directory: packages/web-ui
+        run: node --experimental-strip-types --test components/SecAgentWorkspace.test.mjs lib/agent-mode.test.mjs
 
       - name: Type-check repository
         run: npx tsgo --noEmit
