@@ -73,5 +73,8 @@ jobs:
         working-directory: packages/web-ui
         run: node --experimental-strip-types --test components/SecAgentWorkspace.test.mjs lib/agent-mode.test.mjs
 
+      - name: Hydrate generated model data
+        run: npm run hydrate:model-data
+
       - name: Type-check repository
         run: npx tsgo --noEmit
