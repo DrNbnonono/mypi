@@ -5,43 +5,26 @@ import { createSecAgentCompetitionExtension } from "./extension-competition.ts";
 import { createSecAgentDelegationExtension } from "./extension-delegation.ts";
 import { createSecAgentScopeGuardExtension } from "./extension-scope-guard.ts";
 import { createSecAgentStaticAnalysisExtension } from "./extension-static-analysis.ts";
+import { createSecAgentWebAnalysisExtension } from "./extension-web-analysis.ts";
 import { createSecAgentExtension } from "./extension.ts";
 import { SecAgentRuntime, type SecAgentRuntimeCommand } from "./runtime.ts";
 import { SECAGENT_RUNTIME_PACKAGE_SOURCES } from "./runtime-packages.ts";
 
-export interface CreateSecAgentProfileOptions {
-	runtimePackageSources?: readonly string[];
-}
-
-interface SecAgentProfileRuntime {
-	snapshot(): unknown;
-	command(command: unknown): unknown;
-	subscribe(listener: (snapshot: unknown) => void): () => void;
-}
-
+export interface CreateSecAgentProfileOptions { runtimePackageSources?: readonly string[]; }
+interface SecAgentProfileRuntime { snapshot(): unknown; command(command: unknown): unknown; subscribe(listener: (snapshot: unknown) => void): () => void; }
 interface SecAgentProfileDefinition {
-	mode: "sec";
-	displayName: string;
-	resourcePaths: { extensionPaths: string[] };
+	mode: "sec"; displayName: string; resourcePaths: { extensionPaths: string[] };
 	createRuntime(context: { sessionManager: SecuritySessionStore }): SecAgentProfileRuntime;
 	createExtensions(): InlineExtension[];
 }
-
 export function createSecAgentProfile(options: CreateSecAgentProfileOptions = {}): SecAgentProfileDefinition {
 	let runtime: SecAgentRuntime | undefined;
 	const runtimePackageSources = options.runtimePackageSources ?? SECAGENT_RUNTIME_PACKAGE_SOURCES;
 	return {
-		mode: "sec",
-		displayName: "Security",
-		resourcePaths: { extensionPaths: [...runtimePackageSources] },
+		mode: "sec", displayName: "Security", resourcePaths: { extensionPaths: [...runtimePackageSources] },
 		createRuntime: (context) => {
 			runtime = new SecAgentRuntime(context.sessionManager);
-			const profileRuntime: SecAgentProfileRuntime = {
-				snapshot: () => runtime?.snapshot(),
-				command: (command) => runtime?.command(command as SecAgentRuntimeCommand),
-				subscribe: (listener) => runtime?.subscribe(listener) ?? (() => undefined),
-			};
-			return profileRuntime;
+			return { snapshot: () => runtime?.snapshot(), command: (command) => runtime?.command(command as SecAgentRuntimeCommand), subscribe: (listener) => runtime?.subscribe(listener) ?? (() => undefined) };
 		},
 		createExtensions: () => {
 			if (!runtime) throw new Error("SecAgent profile runtime must be created before extensions");
@@ -50,6 +33,7 @@ export function createSecAgentProfile(options: CreateSecAgentProfileOptions = {}
 				createSecAgentExtension(runtime),
 				createSecAgentCompetitionExtension(runtime),
 				createSecAgentStaticAnalysisExtension(runtime),
+				createSecAgentWebAnalysisExtension(runtime),
 				createSecAgentDelegationExtension(runtime),
 				createSecAgentBenchmarkExtension(runtime),
 			];
