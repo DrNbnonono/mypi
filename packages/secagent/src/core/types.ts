@@ -12,10 +12,14 @@ export type SecurityScenario =
 	| "incident-response"
 	| "vulnerability-research"
 	| "web-security"
-	| "reverse-engineering";
+	| "reverse-engineering"
+	| "ctf";
+export type CtfChallengeKind = "web" | "pwn" | "reverse" | "crypto" | "forensics" | "misc" | "unknown";
 export type RiskLevel = "P0" | "P1" | "P2" | "P3";
 export type PolicyMode = "strict" | "competition" | "autonomous";
 export type EvidenceKind = "observation" | "artifact" | "indicator" | "finding";
+export type EvidenceRelation = "supports" | "contradicts" | "derived-from" | "duplicates" | "verifies";
+export type VerificationStatus = "verified" | "contradicted" | "insufficient";
 export type ScopeTargetKind = "host" | "domain" | "ipv4" | "cidr" | "url";
 export type ToolCategory =
 	| "internal"
@@ -28,6 +32,25 @@ export type ToolCategory =
 	| "reverse"
 	| "shell";
 export type ToolScopeMode = "none" | "network-target" | "dynamic";
+export type ReplanTrigger =
+	| "decision-failed"
+	| "decision-contradicted"
+	| "decision-stalled"
+	| "repeated-failure"
+	| "verification-contradicted"
+	| "evidence-insufficient"
+	| "budget-pressure"
+	| "observer-drift";
+export type ObserverSignalKind = "stalled" | "drift" | "repeated-failure" | "context-pressure" | "termination-risk";
+export type SecurityAgentRole =
+	| "coordinator"
+	| "sec-recon"
+	| "sec-web"
+	| "sec-analysis"
+	| "sec-response"
+	| "sec-vuln"
+	| "sec-reverse"
+	| "ctf-specialist";
 
 export interface ScopeTarget {
 	id: string;
@@ -85,7 +108,44 @@ export interface SecurityEvidence {
 	sha256?: string;
 	confidence: number;
 	decisionIds?: string[];
+	targetRefs?: string[];
+	agentRole?: SecurityAgentRole;
 	createdAt: string;
+}
+
+export interface SecurityEvidenceEdge {
+	id: string;
+	fromEvidenceId: string;
+	toEvidenceId?: string;
+	toHypothesisId?: string;
+	relation: EvidenceRelation;
+	confidence: number;
+	createdAt: string;
+}
+
+export interface SecurityHypothesisRecord {
+	id: string;
+	statement: string;
+	status: "active" | "verified" | "contradicted" | "rejected";
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface SecurityVerificationRecord {
+	id: string;
+	hypothesisId: string;
+	status: VerificationStatus;
+	score: number;
+	evidenceIds: string[];
+	independentSources: number;
+	reason: string;
+	createdAt: string;
+}
+
+export interface SecurityEvidenceGraph {
+	edges: SecurityEvidenceEdge[];
+	hypotheses: SecurityHypothesisRecord[];
+	verifications: SecurityVerificationRecord[];
 }
 
 export interface SecurityFinding {
@@ -93,6 +153,8 @@ export interface SecurityFinding {
 	summary: string;
 	severity: "info" | "low" | "medium" | "high" | "critical";
 	evidenceIds?: string[];
+	verificationId?: string;
+	verified?: boolean;
 	remediation?: string;
 	createdAt: string;
 }
@@ -129,11 +191,38 @@ export interface CandidateActionInput {
 	riskHint?: number;
 	cost: number;
 	preconditions: string[];
+	capability?: string;
+	targets?: string[];
+	expectedEvidence?: string[];
+	successCriteria?: string[];
+	stopConditions?: string[];
+	fallbackActionIds?: string[];
+	estimatedDurationMs?: number;
 }
 
 export interface ScoredAction extends CandidateActionInput {
 	risk: number;
 	score: number;
+	noveltyPenalty?: number;
+	budgetPenalty?: number;
+}
+
+export interface SecurityBudgetLimits {
+	maxDecisions: number;
+	maxToolCalls: number;
+	maxReplans: number;
+	deadlineAt?: string;
+}
+
+export interface SecurityBudgetUsage {
+	decisionsUsed: number;
+	toolCallsUsed: number;
+	replansUsed: number;
+}
+
+export interface SecurityBudgetState {
+	limits: SecurityBudgetLimits;
+	usage: SecurityBudgetUsage;
 }
 
 export interface SecurityDecision {
@@ -148,10 +237,51 @@ export interface SecurityDecision {
 	expectedResult?: string;
 	actualResult?: string;
 	resultStatus?: "pending" | "succeeded" | "failed" | "contradicted";
+	planRevision?: number;
+	attempt?: number;
+	replanId?: string;
+	budgetSnapshot?: SecurityBudgetState;
+}
+
+export interface SecurityReplanRecord {
+	id: string;
+	trigger: ReplanTrigger;
+	reason: string;
+	previousDecisionId?: string;
+	createdAt: string;
+}
+
+export interface SecurityObserverSignal {
+	id: string;
+	kind: ObserverSignalKind;
+	severity: "info" | "warning" | "critical";
+	reason: string;
+	decisionIds: string[];
+	createdAt: string;
+}
+
+export interface SecurityDelegationRecord {
+	id: string;
+	role: SecurityAgentRole;
+	objective: string;
+	parentDecisionId?: string;
+	status: "planned" | "running" | "completed" | "failed" | "cancelled";
+	evidenceIds: string[];
+	createdAt: string;
+	completedAt?: string;
+}
+
+export interface CtfChallengeProfile {
+	kind: CtfChallengeKind;
+	objective: string;
+	recommendedCapabilities: string[];
+	flagPatterns: string[];
+	expectedEvidence: string[];
+	createdAt: string;
 }
 
 export interface SecurityState {
-	version: 4;
+	version: 5;
 	revision: number;
 	task?: SecurityTaskSpec;
 	goal: string;
@@ -161,10 +291,16 @@ export interface SecurityState {
 	autonomousAuthorization?: AutonomousAuthorization;
 	scope: SecurityScope;
 	evidence: SecurityEvidence[];
+	evidenceGraph: SecurityEvidenceGraph;
 	hypotheses: string[];
 	rejectedHypotheses: string[];
 	findings: SecurityFinding[];
 	decisions: SecurityDecision[];
+	replans: SecurityReplanRecord[];
+	observerSignals: SecurityObserverSignal[];
+	delegations: SecurityDelegationRecord[];
+	budget: SecurityBudgetState;
+	ctfProfile?: CtfChallengeProfile;
 }
 
 export type SecurityEvent =
@@ -175,8 +311,11 @@ export type SecurityEvent =
 	| { type: "autonomous_authorized"; authorization: AutonomousAuthorization; createdAt: string }
 	| { type: "scope_set"; scope: SecurityScope; createdAt: string }
 	| { type: "evidence_added"; evidence: SecurityEvidence; createdAt: string }
+	| { type: "evidence_linked"; edge: SecurityEvidenceEdge; createdAt: string }
 	| { type: "hypothesis_added"; hypothesis: string; createdAt: string }
 	| { type: "hypothesis_rejected"; hypothesis: string; createdAt: string }
+	| { type: "hypothesis_recorded"; hypothesis: SecurityHypothesisRecord; createdAt: string }
+	| { type: "hypothesis_verified"; verification: SecurityVerificationRecord; createdAt: string }
 	| { type: "finding_added"; finding: SecurityFinding; createdAt: string }
 	| { type: "decision_recorded"; decision: SecurityDecision; createdAt: string }
 	| {
@@ -185,7 +324,13 @@ export type SecurityEvent =
 			actualResult: string;
 			status: "succeeded" | "failed" | "contradicted";
 			createdAt: string;
-	  };
+	  }
+	| { type: "replan_recorded"; replan: SecurityReplanRecord; createdAt: string }
+	| { type: "observer_signal"; signal: SecurityObserverSignal; createdAt: string }
+	| { type: "delegation_recorded"; delegation: SecurityDelegationRecord; createdAt: string }
+	| { type: "budget_configured"; limits: SecurityBudgetLimits; createdAt: string }
+	| { type: "budget_consumed"; resource: "decision" | "tool-call" | "replan"; amount: number; createdAt: string }
+	| { type: "ctf_profiled"; profile: CtfChallengeProfile; createdAt: string };
 
 export interface RiskAssessment {
 	level: RiskLevel;

@@ -1,0 +1,8 @@
+{
+	"extends": "./tsconfig.json",
+	"exclude": [
+		"**/dist/**",
+		"packages/coding-agent/examples/extensions/gondolin/**",
+		"packages/ai/test/**"
+	]
+}

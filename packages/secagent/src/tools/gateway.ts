@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { summarizeUnknown } from "../core/audit.ts";
+import { assessBudget } from "../core/budget.ts";
 import { assessToolRisk, decidePermission } from "../core/policy.ts";
 import { assessToolScope } from "../core/scope.ts";
 import type { SecurityEvidence, ToolAuditRecord } from "../core/types.ts";
@@ -36,7 +37,6 @@ export class SecurityExecutionGateway {
 		const risk = assessToolRisk(request.tool, request.input);
 		const scope = assessToolScope(request.tool, request.input, state.scope);
 		const permission = decidePermission(state.policyMode, risk.level);
-		const autonomousScopeWarning = state.policyMode === "autonomous" && !scope.allowed;
 		const audit: ToolAuditRecord = {
 			id: randomUUID(),
 			toolCallId: `gateway-${randomUUID()}`,
@@ -46,9 +46,8 @@ export class SecurityExecutionGateway {
 			risk,
 			scope,
 			policyMode: state.policyMode,
-			policyDecision: autonomousScopeWarning ? "warn" : permission,
+			policyDecision: permission,
 			blocked: false,
-			warnings: autonomousScopeWarning ? scope.reasons : undefined,
 			inputSummary: summarizeUnknown(request.input),
 		};
 		const finish = (result: SecurityToolExecutionResult, blocked = false): SecurityToolExecutionResult => {
@@ -79,7 +78,10 @@ export class SecurityExecutionGateway {
 		if (!selected || selected.tool.toLowerCase() !== request.tool.toLowerCase())
 			return finish(failed(`Decision ${decision.id} does not authorize tool ${request.tool}`), true);
 		if (!adapter) return finishDecision(failed(`No audited adapter is registered for ${request.tool}`), true);
-		if (!scope.allowed && !autonomousScopeWarning) return finishDecision(failed(scope.reasons.join("; ")), true);
+		if (!scope.allowed) return finishDecision(failed(scope.reasons.join("; ")), true);
+		const budget = assessBudget(state.budget, "tool-call");
+		if (!budget.allowed) return finishDecision(failed(budget.reason ?? "Tool-call budget exhausted"), true);
+		if (permission === "deny") return finishDecision(failed(`${risk.level} is denied by the active policy`), true);
 		if (permission === "confirm") {
 			if (!context.confirm) return finishDecision(failed(`${risk.level} requires interactive approval`), true);
 			const approved = await context.confirm(
@@ -95,6 +97,7 @@ export class SecurityExecutionGateway {
 			return finishDecision({ ok: false, diagnostic: availability.diagnostic, evidence: [] });
 		const preconditions = await adapter.checkPreconditions(request.input, context);
 		if (preconditions.length > 0) return finishDecision(failed(preconditions.join("; ")));
+		this.runtime.append({ type: "budget_consumed", resource: "tool-call", amount: 1, createdAt: new Date().toISOString() });
 		const result = await adapter.execute(request.input, context);
 		for (const normalized of result.evidence) {
 			const evidence: SecurityEvidence = {

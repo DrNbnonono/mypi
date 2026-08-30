@@ -59,7 +59,7 @@ export class SecAgentRuntime {
 
 	snapshot(): SecAgentProfileSnapshot {
 		const autonomous = canEnableAutonomous(this.state);
-		const replan = assessReplanNeed(this.state.decisions);
+		const replan = assessReplanNeed(this.state);
 		return {
 			mode: "sec",
 			state: structuredClone(this.state),
@@ -83,18 +83,10 @@ export class SecAgentRuntime {
 				this.append({ type: "scope_set", scope: command.scope, createdAt: new Date().toISOString() });
 				break;
 			case "set_isolation":
-				this.append({
-					type: "isolation_changed",
-					isolation: command.isolation,
-					createdAt: new Date().toISOString(),
-				});
+				this.append({ type: "isolation_changed", isolation: command.isolation, createdAt: new Date().toISOString() });
 				break;
 			case "authorize_autonomous":
-				this.append({
-					type: "autonomous_authorized",
-					authorization: command.authorization,
-					createdAt: new Date().toISOString(),
-				});
+				this.append({ type: "autonomous_authorized", authorization: command.authorization, createdAt: new Date().toISOString() });
 				break;
 			case "append_event":
 				this.append(command.event);

@@ -1,6 +1,7 @@
 import type { InlineExtension } from "@earendil-works/pi-coding-agent";
 import type { SecuritySessionStore } from "./core/state.ts";
 import { createSecAgentExtension } from "./extension.ts";
+import { createSecAgentCompetitionExtension } from "./extension-competition.ts";
 import { SecAgentRuntime, type SecAgentRuntimeCommand } from "./runtime.ts";
 import { SECAGENT_RUNTIME_PACKAGE_SOURCES } from "./runtime-packages.ts";
 
@@ -40,7 +41,7 @@ export function createSecAgentProfile(options: CreateSecAgentProfileOptions = {}
 		},
 		createExtensions: () => {
 			if (!runtime) throw new Error("SecAgent profile runtime must be created before extensions");
-			return [createSecAgentExtension(runtime)];
+			return [createSecAgentExtension(runtime), createSecAgentCompetitionExtension(runtime)];
 		},
 	};
 }
