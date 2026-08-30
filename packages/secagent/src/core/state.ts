@@ -152,9 +152,13 @@ export function applySecurityEvent(state: SecurityState, event: SecurityEvent): 
 		case "observer_signal":
 			next.observerSignals.push({ ...event.signal, decisionIds: [...event.signal.decisionIds] });
 			return next;
-		case "delegation_recorded":
-			next.delegations.push({ ...event.delegation, evidenceIds: [...event.delegation.evidenceIds] });
+		case "delegation_recorded": {
+			const delegation = { ...event.delegation, evidenceIds: [...event.delegation.evidenceIds] };
+			const index = next.delegations.findIndex((item) => item.id === delegation.id);
+			if (index >= 0) next.delegations[index] = delegation;
+			else next.delegations.push(delegation);
 			return next;
+		}
 		case "budget_configured":
 			next.budget.limits = { ...event.limits };
 			return next;
