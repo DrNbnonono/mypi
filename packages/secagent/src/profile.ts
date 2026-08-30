@@ -1,5 +1,6 @@
 import type { InlineExtension } from "@earendil-works/pi-coding-agent";
 import type { SecuritySessionStore } from "./core/state.ts";
+import { createSecAgentBenchmarkExtension } from "./extension-benchmark.ts";
 import { createSecAgentCompetitionExtension } from "./extension-competition.ts";
 import { createSecAgentScopeGuardExtension } from "./extension-scope-guard.ts";
 import { createSecAgentStaticAnalysisExtension } from "./extension-static-analysis.ts";
@@ -48,6 +49,7 @@ export function createSecAgentProfile(options: CreateSecAgentProfileOptions = {}
 				createSecAgentExtension(runtime),
 				createSecAgentCompetitionExtension(runtime),
 				createSecAgentStaticAnalysisExtension(runtime),
+				createSecAgentBenchmarkExtension(runtime),
 			];
 		},
 	};

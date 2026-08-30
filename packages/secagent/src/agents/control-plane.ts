@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { prioritizeCapabilityHints } from "../core/capability-coverage.ts";
 import type {
 	SecurityAgentRole,
 	SecurityDelegationRecord,
@@ -60,6 +61,7 @@ function roleForState(state: SecurityState): { role: SecurityAgentRole; reason: 
 export function recommendAgentDispatch(state: SecurityState, objective?: string, parentDecisionId?: string): AgentDispatchRecommendation {
 	const selected = roleForState(state);
 	const remainingTools = Math.max(1, state.budget.limits.maxToolCalls - state.budget.usage.toolCallsUsed);
+	const capabilityHints = prioritizeCapabilityHints(state, state.ctfProfile?.recommendedCapabilities ?? []);
 	const envelope: AgentTaskEnvelope = {
 		taskId: randomUUID(),
 		parentDecisionId,
@@ -77,7 +79,7 @@ export function recommendAgentDispatch(state: SecurityState, objective?: string,
 		successCriteria: [...(state.task?.successCriteria ?? [])],
 		availableEvidenceIds: state.evidence.slice(-24).map((item) => item.id),
 		requiredEvidence: state.ctfProfile?.expectedEvidence.slice(0, 6) ?? [],
-		capabilityHints: [...(state.ctfProfile?.recommendedCapabilities ?? [])],
+		capabilityHints,
 		budget: {
 			maxTurns: Math.min(12, Math.max(3, Math.ceil(remainingTools / 6))),
 			maxToolCalls: Math.min(24, remainingTools),
