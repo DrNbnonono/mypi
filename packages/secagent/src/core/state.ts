@@ -77,10 +77,8 @@ export function applySecurityEvent(state: SecurityState, event: SecurityEvent): 
 				revision: next.revision,
 				task: event.task,
 				goal: event.task.goal,
-				policyMode: state.policyMode,
+				policyMode: state.policyMode === "autonomous" ? "strict" : state.policyMode,
 				isolation: state.isolation,
-				autonomousAuthorization: state.autonomousAuthorization,
-				scope: state.scope,
 			};
 		case "stage_changed":
 			next.stage = event.stage;
