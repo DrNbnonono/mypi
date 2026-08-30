@@ -11,6 +11,7 @@ on:
       - ".pi/sandbox.json"
       - ".mcp.json"
       - "package.json"
+      - "package-lock.json"
       - "tsconfig.json"
       - ".github/workflows/secagent.yml"
   pull_request:
@@ -21,6 +22,7 @@ on:
       - ".pi/sandbox.json"
       - ".mcp.json"
       - "package.json"
+      - "package-lock.json"
       - "tsconfig.json"
       - ".github/workflows/secagent.yml"
 
