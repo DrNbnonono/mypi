@@ -26,4 +26,31 @@ describe("state-aware candidate generation", () => {
 		expect(generated.candidates.some((candidate) => candidate.tool === "objdump")).toBe(true);
 		expect(generated.candidates.some((candidate) => candidate.id.includes("ctf-specialist"))).toBe(false);
 	});
+
+	it("only exposes FFUF when a deterministic in-workspace wordlist is available", () => {
+		const state = createInitialSecurityState();
+		state.task = { id: "web", goal: "discover paths", scenario: "web-security", assets: [], constraints: [], successCriteria: [], declaredAuthorization: [], pendingConfirmations: [], createdAt: "2026-08-30T00:00:00Z" };
+		state.stage = "recon";
+		state.scope.targets = [{ id: "scope", kind: "url", value: "http://127.0.0.1/" }];
+		const withoutWordlist = generateCandidateActions(state);
+		expect(withoutWordlist.candidates.some((candidate) => candidate.tool === "ffuf")).toBe(false);
+		expect(withoutWordlist.gaps.some((gap) => /ffuf.*wordlist/i.test(gap))).toBe(true);
+		state.task.assets.push({ id: "wordlist", name: "paths-wordlist.txt", kind: "text", path: "paths-wordlist.txt" });
+		expect(generateCandidateActions(state).candidates.some((candidate) => candidate.tool === "ffuf")).toBe(true);
+	});
+
+	it("does not repeat an already successful deterministic candidate", () => {
+		const state = createInitialSecurityState();
+		state.task = { id: "web", goal: "fingerprint service", scenario: "web-security", assets: [], constraints: [], successCriteria: [], declaredAuthorization: [], pendingConfirmations: [], createdAt: "2026-08-30T00:00:00Z" };
+		state.stage = "recon";
+		state.scope.targets = [{ id: "scope", kind: "url", value: "http://127.0.0.1/" }];
+		const first = generateCandidateActions(state).candidates.find((candidate) => candidate.tool === "httpx");
+		expect(first).toBeDefined();
+		if (!first) return;
+		state.decisions.push({
+			id: "d1", createdAt: "2026-08-30T00:00:01Z", goal: state.task.goal, stage: "recon", evidenceIds: [],
+			candidates: [{ ...first, risk: 0.3, score: 0.8 }], selectedActionId: first.id, resultStatus: "succeeded",
+		});
+		expect(generateCandidateActions(state).candidates.some((candidate) => candidate.id === first.id)).toBe(false);
+	});
 });
