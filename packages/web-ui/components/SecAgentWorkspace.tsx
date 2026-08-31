@@ -7,6 +7,8 @@ interface SecurityEvidence { id: string; summary: string; confidence: number }
 interface SecurityFinding { id: string; summary: string; severity: string }
 interface SecurityDecision { id: string; selectedActionId: string; rationale?: string; resultStatus?: string }
 interface ToolAuditRecord { id: string; createdAt: string; toolName: string; policyDecision: string; blocked: boolean; isError?: boolean }
+interface SecAgentDiagnosticCheck { id: string; label: string; status: "pass" | "warn" | "fail"; message: string }
+interface SecAgentDiagnostics { createdAt: string; ready: boolean; runtimeReady: boolean; autonomousReady: boolean; demoReady: boolean; checks: SecAgentDiagnosticCheck[] }
 interface SecurityProfileSnapshot {
 	mode: "sec";
 	state: {
@@ -23,6 +25,7 @@ interface SecurityProfileSnapshot {
 	audit: ToolAuditRecord[];
 	autonomousReady: boolean;
 	autonomousBlockReason?: string;
+	diagnostics?: SecAgentDiagnostics;
 }
 
 type ProfileMode = "coding" | "sec";
@@ -38,6 +41,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isStringArray(value: unknown): value is string[] {
 	return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isSecAgentDiagnostics(value: unknown): value is SecAgentDiagnostics {
+	return isRecord(value)
+		&& typeof value.createdAt === "string"
+		&& typeof value.ready === "boolean"
+		&& typeof value.runtimeReady === "boolean"
+		&& typeof value.autonomousReady === "boolean"
+		&& typeof value.demoReady === "boolean"
+		&& Array.isArray(value.checks)
+		&& value.checks.every((check) => isRecord(check)
+			&& typeof check.id === "string"
+			&& typeof check.label === "string"
+			&& (check.status === "pass" || check.status === "warn" || check.status === "fail")
+			&& typeof check.message === "string");
 }
 
 export function isSecurityProfileSnapshot(value: unknown): value is SecurityProfileSnapshot {
@@ -58,7 +76,8 @@ export function isSecurityProfileSnapshot(value: unknown): value is SecurityProf
 		&& isStringArray(state.hypotheses)
 		&& Array.isArray(state.decisions)
 		&& Array.isArray(value.audit)
-		&& typeof value.autonomousReady === "boolean";
+		&& typeof value.autonomousReady === "boolean"
+		&& (value.diagnostics === undefined || isSecAgentDiagnostics(value.diagnostics));
 }
 
 export function targetKind(value: string): ScopeTarget["kind"] {
@@ -210,6 +229,12 @@ export function SecAgentWorkspace({ sessionId }: { sessionId: string | null }) {
 		if (typeof value === "string") setReport({ format, content: value });
 	};
 
+	const runDiagnostics = async () => {
+		const value = await command({ type: "run_diagnostics" });
+		if (!isSecAgentDiagnostics(value)) throw new Error("Sec diagnostics returned an invalid result");
+		setSnapshot((current) => current ? { ...current, diagnostics: value } : current);
+	};
+
 	const downloadReport = () => {
 		if (!report) return;
 		const blob = new Blob([report.content], { type: report.format === "json" ? "application/json" : "text/markdown" });
@@ -265,6 +290,14 @@ export function SecAgentWorkspace({ sessionId }: { sessionId: string | null }) {
 						<div style={{ fontWeight: 600, marginBottom: 6 }}>Decision and tool audit</div>
 						<div>{snapshot?.state.decisions.length ?? 0} decisions · {snapshot?.audit.length ?? 0} tool calls</div>
 						{snapshot?.audit.slice(-4).map((record) => <div key={record.id}>{record.blocked ? "BLOCK" : record.isError ? "ERROR" : "OK"} {record.toolName} · {record.policyDecision}</div>)}
+					</div>
+					<div style={{ ...sectionStyle, gridColumn: "1 / -1" }}>
+						<div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+							<strong>Environment diagnostics</strong>
+							<button type="button" disabled={!sessionId || busy} onClick={() => void runDiagnostics().catch((cause) => setError(errorText(cause)))}>Run diagnostics</button>
+							{snapshot?.diagnostics && <span>runtime:{snapshot.diagnostics.runtimeReady ? "ready" : "blocked"} · autonomous:{snapshot.diagnostics.autonomousReady ? "ready" : "blocked"} · demo:{snapshot.diagnostics.demoReady ? "ready" : "blocked"}</span>}
+						</div>
+						{snapshot?.diagnostics?.checks.map((check) => <div key={check.id}>[{check.status.toUpperCase()}] {check.label}: {check.message}</div>)}
 					</div>
 					<div style={{ ...sectionStyle, gridColumn: "1 / -1" }}>
 						<div style={{ display: "flex", gap: 5, alignItems: "center" }}><strong>Report</strong><button type="button" disabled={!sessionId || busy} onClick={() => void buildReport("markdown").catch((cause) => setError(errorText(cause)))}>Markdown</button><button type="button" disabled={!sessionId || busy} onClick={() => void buildReport("json").catch((cause) => setError(errorText(cause)))}>JSON</button><button type="button" disabled={!report} onClick={downloadReport}>Download</button></div>

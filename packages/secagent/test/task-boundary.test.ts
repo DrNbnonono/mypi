@@ -32,7 +32,11 @@ describe("security task boundary", () => {
 			authorizationSource: "competition fixture",
 		};
 
-		const next = applySecurityEvent(state, { type: "task_started", task: task("two"), createdAt: "2026-08-30T00:01:00Z" });
+		const next = applySecurityEvent(state, {
+			type: "task_started",
+			task: task("two"),
+			createdAt: "2026-08-30T00:01:00Z",
+		});
 		expect(next.scope.targets).toEqual([]);
 		expect(next.scope.authorizationSource).toBeUndefined();
 		expect(next.autonomousAuthorization).toBeUndefined();
@@ -44,8 +48,29 @@ describe("security task boundary", () => {
 		const state = createInitialSecurityState();
 		state.policyMode = "competition";
 		state.scope.targets = [{ id: "scope-1", kind: "domain", value: "lab.example" }];
-		const next = applySecurityEvent(state, { type: "task_started", task: task("three"), createdAt: "2026-08-30T00:01:00Z" });
+		const next = applySecurityEvent(state, {
+			type: "task_started",
+			task: task("three"),
+			createdAt: "2026-08-30T00:01:00Z",
+		});
 		expect(next.policyMode).toBe("competition");
 		expect(next.scope.targets).toEqual([]);
+	});
+
+	it("clears autonomous authorization when isolation changes", () => {
+		const state = createInitialSecurityState();
+		state.isolation = { status: "sandbox", source: "pi-sandbox" };
+		state.autonomousAuthorization = {
+			operator: "operator",
+			reason: "controlled",
+			isolationSource: "pi-sandbox",
+			confirmedAt: "2026-08-30T00:00:00Z",
+		};
+		const next = applySecurityEvent(state, {
+			type: "isolation_changed",
+			isolation: { status: "external", source: "organizer-lab" },
+			createdAt: "2026-08-30T00:01:00Z",
+		});
+		expect(next.autonomousAuthorization).toBeUndefined();
 	});
 });

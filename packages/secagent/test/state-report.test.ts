@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
+import { appendAuditRecord, readAuditRecords, redactSecurityText } from "../src/core/audit.ts";
+import { assessToolRisk } from "../src/core/policy.ts";
+import type { SecuritySessionStore } from "../src/core/state.ts";
 import { applySecurityEvent, createInitialSecurityState } from "../src/core/state.ts";
-import { buildSecurityReportJson, buildSecurityReportMarkdown, redactSecurityText } from "../src/report/generator.ts";
+import { buildSecurityReportJson, buildSecurityReportMarkdown } from "../src/report/generator.ts";
+
+class MemoryStore implements SecuritySessionStore {
+	readonly entries: Array<{ type: string; customType?: string; data?: unknown }> = [];
+	getBranch() {
+		return [...this.entries];
+	}
+	appendCustomEntry(customType: string, data?: unknown): string {
+		this.entries.push({ type: "custom", customType, data });
+		return String(this.entries.length);
+	}
+}
 
 describe("state replay and reports", () => {
 	it("records decisions and their actual outcomes", () => {
@@ -48,5 +62,25 @@ describe("state replay and reports", () => {
 		state.goal = "token=secret-value";
 		expect(redactSecurityText("Authorization: BearerSecret")).toContain("[REDACTED]");
 		expect(buildSecurityReportJson(state, [])).not.toContain("secret-value");
+	});
+
+	it("redacts credentials before audit persistence", () => {
+		const store = new MemoryStore();
+		appendAuditRecord(store, {
+			id: "audit-1",
+			toolCallId: "call-1",
+			toolName: "curl",
+			createdAt: "2026-08-30T00:00:00Z",
+			risk: assessToolRisk("curl", { target: "http://127.0.0.1" }),
+			scope: { required: true, allowed: true, targets: ["127.0.0.1"], reasons: [] },
+			policyMode: "strict",
+			policyDecision: "allow",
+			blocked: false,
+			inputSummary: "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature sk-secretvalue12345",
+		});
+		const persisted = JSON.stringify(readAuditRecords(store));
+		expect(persisted).not.toContain("secretvalue");
+		expect(persisted).not.toContain("eyJhbGci");
+		expect(persisted).toContain("REDACTED");
 	});
 });

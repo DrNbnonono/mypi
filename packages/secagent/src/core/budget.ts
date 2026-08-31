@@ -36,11 +36,12 @@ export function budgetPressure(budget: SecurityBudgetState): number {
 export function assessBudget(budget: SecurityBudgetState, resource: BudgetResource, amount = 1): BudgetAssessment {
 	if (budget.limits.deadlineAt && Date.now() >= Date.parse(budget.limits.deadlineAt))
 		return { allowed: false, pressure: 1, reason: `Budget deadline ${budget.limits.deadlineAt} has expired` };
-	const [used, limit] = resource === "decision"
-		? [budget.usage.decisionsUsed, budget.limits.maxDecisions]
-		: resource === "tool-call"
-			? [budget.usage.toolCallsUsed, budget.limits.maxToolCalls]
-			: [budget.usage.replansUsed, budget.limits.maxReplans];
+	const [used, limit] =
+		resource === "decision"
+			? [budget.usage.decisionsUsed, budget.limits.maxDecisions]
+			: resource === "tool-call"
+				? [budget.usage.toolCallsUsed, budget.limits.maxToolCalls]
+				: [budget.usage.replansUsed, budget.limits.maxReplans];
 	if (used + amount > limit)
 		return { allowed: false, pressure: 1, reason: `${resource} budget exhausted (${used}/${limit})` };
 	return { allowed: true, pressure: budgetPressure(budget) };

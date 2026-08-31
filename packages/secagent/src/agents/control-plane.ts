@@ -1,11 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { prioritizeCapabilityHints } from "../core/capability-coverage.ts";
-import type {
-	SecurityAgentRole,
-	SecurityDelegationRecord,
-	SecurityScenario,
-	SecurityState,
-} from "../core/types.ts";
+import type { SecurityAgentRole, SecurityDelegationRecord, SecurityScenario, SecurityState } from "../core/types.ts";
 
 export interface AgentTaskEnvelope {
 	taskId: string;
@@ -32,13 +27,26 @@ export interface AgentDispatchRecommendation {
 function ctfRoleForState(state: SecurityState): { role: SecurityAgentRole; reason: string } {
 	const kind = state.ctfProfile?.kind ?? "unknown";
 	if (kind === "web")
-		return { role: "sec-web", reason: "CTF is a capability overlay: web challenges reuse the bounded Web specialist" };
+		return {
+			role: "sec-web",
+			reason: "CTF is a capability overlay: web challenges reuse the bounded Web specialist",
+		};
 	if (kind === "reverse")
-		return { role: "sec-reverse", reason: "CTF is a capability overlay: reversing reuses the binary-analysis specialist" };
+		return {
+			role: "sec-reverse",
+			reason: "CTF is a capability overlay: reversing reuses the binary-analysis specialist",
+		};
 	if (kind === "pwn") {
 		if (state.stage === "verification")
-			return { role: "sec-vuln", reason: "Pwn verification reuses the vulnerability specialist after binary analysis establishes a primitive" };
-		return { role: "sec-reverse", reason: "Pwn triage starts with the existing binary-analysis specialist instead of a separate CTF agent" };
+			return {
+				role: "sec-vuln",
+				reason:
+					"Pwn verification reuses the vulnerability specialist after binary analysis establishes a primitive",
+			};
+		return {
+			role: "sec-reverse",
+			reason: "Pwn triage starts with the existing binary-analysis specialist instead of a separate CTF agent",
+		};
 	}
 	return {
 		role: "sec-analysis",
@@ -49,16 +57,28 @@ function ctfRoleForState(state: SecurityState): { role: SecurityAgentRole; reaso
 function roleForState(state: SecurityState): { role: SecurityAgentRole; reason: string } {
 	const scenario = state.task?.scenario;
 	if (scenario === "ctf" || state.ctfProfile) return ctfRoleForState(state);
-	if (scenario === "web-security") return { role: "sec-web", reason: "Web-security scenario requires HTTP-centric evidence collection" };
-	if (scenario === "reverse-engineering") return { role: "sec-reverse", reason: "Reverse-engineering scenario requires artifact-centric static analysis" };
-	if (scenario === "vulnerability-research") return { role: "sec-vuln", reason: "Vulnerability research requires reproduction and verification" };
-	if (scenario === "incident-response") return { role: "sec-analysis", reason: "Incident response prioritizes evidence correlation and artifact analysis" };
+	if (scenario === "web-security")
+		return { role: "sec-web", reason: "Web-security scenario requires HTTP-centric evidence collection" };
+	if (scenario === "reverse-engineering")
+		return { role: "sec-reverse", reason: "Reverse-engineering scenario requires artifact-centric static analysis" };
+	if (scenario === "vulnerability-research")
+		return { role: "sec-vuln", reason: "Vulnerability research requires reproduction and verification" };
+	if (scenario === "incident-response")
+		return {
+			role: "sec-analysis",
+			reason: "Incident response prioritizes evidence correlation and artifact analysis",
+		};
 	if (state.stage === "recon") return { role: "sec-recon", reason: "Recon stage prioritizes bounded discovery" };
-	if (state.stage === "response") return { role: "sec-response", reason: "Response stage requires remediation-oriented execution" };
+	if (state.stage === "response")
+		return { role: "sec-response", reason: "Response stage requires remediation-oriented execution" };
 	return { role: "sec-analysis", reason: "General analysis worker best matches the current state" };
 }
 
-export function recommendAgentDispatch(state: SecurityState, objective?: string, parentDecisionId?: string): AgentDispatchRecommendation {
+export function recommendAgentDispatch(
+	state: SecurityState,
+	objective?: string,
+	parentDecisionId?: string,
+): AgentDispatchRecommendation {
 	const selected = roleForState(state);
 	const remainingTools = Math.max(1, state.budget.limits.maxToolCalls - state.budget.usage.toolCallsUsed);
 	const capabilityHints = prioritizeCapabilityHints(state, state.ctfProfile?.recommendedCapabilities ?? []);
@@ -89,7 +109,10 @@ export function recommendAgentDispatch(state: SecurityState, objective?: string,
 	return { role: selected.role, reason: selected.reason, envelope };
 }
 
-export function delegationRecord(recommendation: AgentDispatchRecommendation, parentDecisionId?: string): SecurityDelegationRecord {
+export function delegationRecord(
+	recommendation: AgentDispatchRecommendation,
+	parentDecisionId?: string,
+): SecurityDelegationRecord {
 	return {
 		id: recommendation.envelope.taskId,
 		role: recommendation.role,

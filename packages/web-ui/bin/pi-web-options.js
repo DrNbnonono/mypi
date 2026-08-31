@@ -1,7 +1,4 @@
-"use strict";
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { parseArgs } = require("util");
+import { parseArgs } from "node:util";
 
 const TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
 
@@ -40,4 +37,4 @@ function parseLaunchOptions(args = process.argv.slice(2), env = process.env) {
   };
 }
 
-module.exports = { parseLaunchOptions };
+export { parseLaunchOptions };

@@ -1,18 +1,50 @@
+x-pi-secagent-image: &pi-secagent-image
+  build:
+    context: ../../..
+    dockerfile: packages/secagent/templates/Dockerfile
+  read_only: true
+  tmpfs:
+    - /tmp:size=512m,mode=1777
+  volumes:
+    - ${SECAGENT_WORKSPACE:-.}:/workspace:rw
+    - ${SECAGENT_TOOLS:-./tools}:/opt/security-tools:ro
+  working_dir: /workspace
+  environment:
+    PI_OFFLINE: ${PI_OFFLINE:-0}
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  networks:
+    - secagent-internal
+
 services:
+  # Default entry point. It can be started with:
+  # docker compose -f packages/secagent/templates/docker-compose.yml up pi-secagent
   pi-secagent:
-    build:
-      context: ../../..
-      dockerfile: packages/secagent/templates/Dockerfile
-    read_only: true
-    tmpfs:
-      - /tmp:size=512m,mode=1777
-    volumes:
-      - ${SECAGENT_WORKSPACE:-.}:/workspace:rw
-      - ${SECAGENT_TOOLS:-./tools}:/opt/security-tools:ro
-    working_dir: /workspace
+    <<: *pi-secagent-image
+    command: ["cli"]
+
+  # The web port is published on the host loopback only. Inside the container
+  # Pi Web listens on the container interface so the host mapping works.
+  pi-secagent-web:
+    <<: *pi-secagent-image
+    profiles: ["web"]
+    command: ["web"]
+    ports:
+      - "127.0.0.1:${SECAGENT_WEB_PORT:-30141}:30141"
+
+  # This target has no host-published port. It is reachable only by services
+  # on the internal Compose network at http://fixture-web:8080/health.
+  fixture-web:
+    <<: *pi-secagent-image
+    profiles: ["fixtures"]
+    entrypoint: ["node", "/opt/pi/packages/secagent/fixtures/web/http-server.mjs"]
+    command: []
     environment:
-      PI_OFFLINE: ${PI_OFFLINE:-0}
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
+      FIXTURE_HOST: 0.0.0.0
+      FIXTURE_PORT: "8080"
+
+networks:
+  secagent-internal:
+    internal: true

@@ -60,6 +60,7 @@ declare module "../types.ts" {
 	}
 }
 
+// 将 BashExecutionMessage 转换为文本
 export function bashExecutionToText(msg: BashExecutionMessage): string {
 	let text = `Ran \`${msg.command}\`\n`;
 	if (msg.output) {
@@ -78,6 +79,7 @@ export function bashExecutionToText(msg: BashExecutionMessage): string {
 	return text;
 }
 
+// 将 BashExecutionMessage 转换为文本
 export function createBranchSummaryMessage(
 	summary: string,
 	fromId: string,
@@ -91,6 +93,7 @@ export function createBranchSummaryMessage(
 	};
 }
 
+// 将 BashExecutionMessage 转换为文本
 export function createCompactionSummaryMessage(
 	summary: string,
 	tokensBefore: number,
@@ -104,6 +107,7 @@ export function createCompactionSummaryMessage(
 	};
 }
 
+// 将 CustomMessage 转换为文本
 export function createCustomMessage(
 	customType: string,
 	content: string | (TextContent | ImageContent)[],

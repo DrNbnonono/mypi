@@ -4,6 +4,7 @@ import { type ExecutionEnv, type FileInfo, type PromptTemplate, type Result, toE
 export type PromptTemplateDiagnosticCode = "file_info_failed" | "list_failed" | "read_failed" | "parse_failed";
 
 /** Warning produced while loading prompt templates. */
+// 系统prompt模板加载时产生的警告
 export interface PromptTemplateDiagnostic {
 	/** Diagnostic severity. Currently only warnings are emitted. */
 	type: "warning";
@@ -26,6 +27,8 @@ interface PromptTemplateFrontmatter {
  *
  * Directory inputs load direct `.md` children non-recursively. File inputs load explicit `.md` files. Missing paths and
  * non-markdown files are skipped. Read and parse failures are returned as diagnostics.
+ * 加载prompt模板从一个或多个路径。
+ * 目录输入加载直接的`.md`子文件，不递归。文件输入加载明确的`.md`文件。缺失的路径和非markdown文件将被跳过。读取和解析失败将作为诊断返回。
  */
 export async function loadPromptTemplates(
 	env: ExecutionEnv,
@@ -66,7 +69,11 @@ export async function loadPromptTemplates(
  *
  * Source values are preserved exactly and attached to every loaded prompt template and diagnostic. The agent package does
  * not interpret source values; applications define their own provenance shape.
- */
+ * 
+ * 从源标记路径加载prompt模板。
+ * 源值被精确保留，并附加到每个加载的prompt模板和诊断中。代理包不解释源值；应用程序定义自己的来源形状。
+ * 
+*/
 export async function loadSourcedPromptTemplates<TSource, TPromptTemplate extends PromptTemplate = PromptTemplate>(
 	env: ExecutionEnv,
 	inputs: Array<{ path: string; source: TSource }>,
@@ -92,6 +99,7 @@ export async function loadSourcedPromptTemplates<TSource, TPromptTemplate extend
 	return { promptTemplates, diagnostics };
 }
 
+// 加载模板
 async function loadTemplatesFromDir(
 	env: ExecutionEnv,
 	dir: string,
@@ -120,6 +128,7 @@ async function loadTemplatesFromDir(
 	return { promptTemplates, diagnostics };
 }
 
+// 加载模板文件
 async function loadTemplateFromFile(
 	env: ExecutionEnv,
 	filePath: string,
@@ -165,6 +174,7 @@ async function loadTemplateFromFile(
 	};
 }
 
+// 重新解决文件或目录的类型
 async function resolveKind(
 	env: ExecutionEnv,
 	info: FileInfo,
@@ -198,6 +208,7 @@ async function resolveKind(
 	return target.value.kind === "file" || target.value.kind === "directory" ? target.value.kind : undefined;
 }
 
+// 解析前端数据
 function parseFrontmatter<T extends Record<string, unknown>>(
 	content: string,
 ): Result<{ frontmatter: T; body: string }, Error> {

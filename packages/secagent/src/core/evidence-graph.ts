@@ -38,7 +38,10 @@ export function createEvidenceEdge(input: {
 	};
 }
 
-export function evidenceForHypothesis(state: SecurityState, hypothesisId: string): Array<{
+export function evidenceForHypothesis(
+	state: SecurityState,
+	hypothesisId: string,
+): Array<{
 	evidence: SecurityEvidence;
 	relation: EvidenceRelation;
 	edgeConfidence: number;
@@ -53,7 +56,9 @@ export function evidenceForHypothesis(state: SecurityState, hypothesisId: string
 }
 
 export function evidenceSourceKey(evidence: SecurityEvidence): string {
-	return evidence.sha256 ? `sha256:${evidence.sha256}` : evidence.source?.trim().toLowerCase() || `evidence:${evidence.id}`;
+	return evidence.sha256
+		? `sha256:${evidence.sha256}`
+		: evidence.source?.trim().toLowerCase() || `evidence:${evidence.id}`;
 }
 
 export function graphIntegrityErrors(state: SecurityState): string[] {
@@ -61,7 +66,8 @@ export function graphIntegrityErrors(state: SecurityState): string[] {
 	const evidenceIds = new Set(state.evidence.map((item) => item.id));
 	const hypothesisIds = new Set(state.evidenceGraph.hypotheses.map((item) => item.id));
 	for (const edge of state.evidenceGraph.edges) {
-		if (!evidenceIds.has(edge.fromEvidenceId)) errors.push(`Edge ${edge.id} references missing evidence ${edge.fromEvidenceId}`);
+		if (!evidenceIds.has(edge.fromEvidenceId))
+			errors.push(`Edge ${edge.id} references missing evidence ${edge.fromEvidenceId}`);
 		if (edge.toEvidenceId && !evidenceIds.has(edge.toEvidenceId))
 			errors.push(`Edge ${edge.id} references missing evidence ${edge.toEvidenceId}`);
 		if (edge.toHypothesisId && !hypothesisIds.has(edge.toHypothesisId))
@@ -69,7 +75,8 @@ export function graphIntegrityErrors(state: SecurityState): string[] {
 	}
 	for (const finding of state.findings) {
 		for (const evidenceId of finding.evidenceIds ?? []) {
-			if (!evidenceIds.has(evidenceId)) errors.push(`Finding ${finding.id} references missing evidence ${evidenceId}`);
+			if (!evidenceIds.has(evidenceId))
+				errors.push(`Finding ${finding.id} references missing evidence ${evidenceId}`);
 		}
 	}
 	return errors;

@@ -1,16 +1,39 @@
 import type { SecurityToolMetadata } from "../core/types.ts";
 import type { SecurityToolAdapter, SecurityToolExecutionContext, SecurityToolExecutionResult } from "./adapter.ts";
-import { checkCommandAvailability, checkLocalInput, preconditionResult, runStandardTool, sha256File, stringInput } from "./standard.ts";
+import {
+	checkCommandAvailability,
+	checkLocalInput,
+	preconditionResult,
+	runStandardTool,
+	sha256File,
+	stringInput,
+} from "./standard.ts";
 
 type StaticToolName = "readelf" | "objdump";
-type StaticAction = "headers" | "sections" | "symbols" | "dynamic" | "notes" | "relocations" | "disassemble" | "security";
+type StaticAction =
+	| "headers"
+	| "sections"
+	| "symbols"
+	| "dynamic"
+	| "notes"
+	| "relocations"
+	| "disassemble"
+	| "security";
 
 const READELF_ARGS: Readonly<Partial<Record<StaticAction, readonly string[]>>> = {
-	headers: ["-h"], sections: ["-S"], symbols: ["-Ws"], dynamic: ["-d"], notes: ["-n"], relocations: ["-r"],
+	headers: ["-h"],
+	sections: ["-S"],
+	symbols: ["-Ws"],
+	dynamic: ["-d"],
+	notes: ["-n"],
+	relocations: ["-r"],
 	security: ["-W", "-h", "-l", "-s", "-d"],
 };
 const OBJDUMP_ARGS: Readonly<Partial<Record<StaticAction, readonly string[]>>> = {
-	headers: ["-f"], sections: ["-h"], symbols: ["-t"], disassemble: ["-d"],
+	headers: ["-f"],
+	sections: ["-h"],
+	symbols: ["-t"],
+	disassemble: ["-d"],
 };
 
 function localPath(input: Record<string, unknown>): string | undefined {
@@ -18,7 +41,8 @@ function localPath(input: Record<string, unknown>): string | undefined {
 }
 function staticAction(input: Record<string, unknown>): StaticAction {
 	const value = stringInput(input, "action") ?? "headers";
-	if (["headers", "sections", "symbols", "dynamic", "notes", "relocations", "disassemble", "security"].includes(value)) return value as StaticAction;
+	if (["headers", "sections", "symbols", "dynamic", "notes", "relocations", "disassemble", "security"].includes(value))
+		return value as StaticAction;
 	throw new Error(`unsupported static-analysis action: ${value}`);
 }
 function argsFor(command: StaticToolName, action: StaticAction, path: string): string[] {
@@ -42,18 +66,34 @@ function mitigationFacts(stdout: string, lines: readonly string[]): Record<strin
 		stackCanary: /__stack_chk_fail/.test(stdout) ? "detected" : "not-detected",
 	};
 }
-function normalizeStatic(command: StaticToolName, action: StaticAction, output: Record<string, unknown>): Record<string, unknown> {
-	const lines = Array.isArray(output.stdoutLines) ? output.stdoutLines.filter((line): line is string => typeof line === "string") : [];
+function normalizeStatic(
+	command: StaticToolName,
+	action: StaticAction,
+	output: Record<string, unknown>,
+): Record<string, unknown> {
+	const lines = Array.isArray(output.stdoutLines)
+		? output.stdoutLines.filter((line): line is string => typeof line === "string")
+		: [];
 	const stdout = typeof output.stdout === "string" ? output.stdout : "";
 	return {
 		...output,
 		action,
-		facts: command === "readelf"
-			? { architecture: valueAfterPrefix(lines, "Machine:"), type: valueAfterPrefix(lines, "Type:"), entryPoint: valueAfterPrefix(lines, "Entry point address:"), ...(action === "security" ? { mitigations: mitigationFacts(stdout, lines) } : {}) }
-			: { format: lines.find((line) => /file format/i.test(line))?.trim() },
+		facts:
+			command === "readelf"
+				? {
+						architecture: valueAfterPrefix(lines, "Machine:"),
+						type: valueAfterPrefix(lines, "Type:"),
+						entryPoint: valueAfterPrefix(lines, "Entry point address:"),
+						...(action === "security" ? { mitigations: mitigationFacts(stdout, lines) } : {}),
+					}
+				: { format: lines.find((line) => /file format/i.test(line))?.trim() },
 	};
 }
-async function preconditions(command: StaticToolName, input: Record<string, unknown>, context: SecurityToolExecutionContext): Promise<string[]> {
+async function preconditions(
+	command: StaticToolName,
+	input: Record<string, unknown>,
+	context: SecurityToolExecutionContext,
+): Promise<string[]> {
 	const checked = await checkLocalInput(localPath(input), context);
 	if (checked.diagnostic || !checked.path) return [checked.diagnostic?.message ?? "a local path is required"];
 	try {
@@ -63,9 +103,15 @@ async function preconditions(command: StaticToolName, input: Record<string, unkn
 		return [error instanceof Error ? error.message : String(error)];
 	}
 }
-async function executeStatic(metadata: SecurityToolMetadata, command: StaticToolName, input: Record<string, unknown>, context: SecurityToolExecutionContext): Promise<SecurityToolExecutionResult> {
+async function executeStatic(
+	metadata: SecurityToolMetadata,
+	command: StaticToolName,
+	input: Record<string, unknown>,
+	context: SecurityToolExecutionContext,
+): Promise<SecurityToolExecutionResult> {
 	const checked = await checkLocalInput(localPath(input), context);
-	if (checked.diagnostic || !checked.path) return preconditionResult(checked.diagnostic?.message ?? "a local path is required");
+	if (checked.diagnostic || !checked.path)
+		return preconditionResult(checked.diagnostic?.message ?? "a local path is required");
 	let action: StaticAction;
 	let args: string[];
 	try {
@@ -78,14 +124,31 @@ async function executeStatic(metadata: SecurityToolMetadata, command: StaticTool
 	try {
 		artifactSha256 = await sha256File(checked.path);
 	} catch (error) {
-		return preconditionResult(`unable to hash local artifact: ${error instanceof Error ? error.message : String(error)}`);
+		return preconditionResult(
+			`unable to hash local artifact: ${error instanceof Error ? error.message : String(error)}`,
+		);
 	}
-	return runStandardTool({ metadata, command, args, targets: [checked.path], input, context, evidence: { sha256: artifactSha256 }, normalize: (output) => normalizeStatic(command, action, output) });
+	return runStandardTool({
+		metadata,
+		command,
+		args,
+		targets: [checked.path],
+		input,
+		context,
+		evidence: { sha256: artifactSha256 },
+		normalize: (output) => normalizeStatic(command, action, output),
+	});
 }
-export function createStaticAnalysisAdapter(metadata: SecurityToolMetadata, command: StaticToolName): SecurityToolAdapter {
+export function createStaticAnalysisAdapter(
+	metadata: SecurityToolMetadata,
+	command: StaticToolName,
+): SecurityToolAdapter {
 	return {
 		metadata,
-		extractTargets: (input) => { const path = localPath(input); return path ? [path] : []; },
+		extractTargets: (input) => {
+			const path = localPath(input);
+			return path ? [path] : [];
+		},
 		checkAvailability: (context) => checkCommandAvailability(command, context),
 		checkPreconditions: (input, context) => preconditions(command, input, context),
 		execute: (input, context) => executeStatic(metadata, command, input, context),

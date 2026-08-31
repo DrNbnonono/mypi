@@ -19,10 +19,18 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     "undici",
     "@earendil-works/pi-coding-agent",
+    "@earendil-works/pi-secagent",
     "@earendil-works/pi-agent-core",
     "@earendil-works/pi-ai",
     "@earendil-works/pi-tui",
   ],
+  webpack(config) {
+    // Keep workspace symlinks as node_modules paths so serverExternalPackages
+    // can match them. Resolving the real path bundles Pi's lazy Node imports
+    // into a webpack context, which cannot load node:fs/node:os/node:path.
+    config.resolve.symlinks = false;
+    return config;
+  },
   allowedDevOrigins: ["127.0.0.1", "192.168.*.*"],
   async headers() {
     return [

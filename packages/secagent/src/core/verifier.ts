@@ -38,7 +38,10 @@ export function verifyHypothesis(
 	const scores = [...sourceScores.values()];
 	const aggregate = scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
 	const directArtifact = supporting.find(
-		(item) => item.evidence.kind === "artifact" && Boolean(item.evidence.sha256) && item.evidence.confidence >= directArtifactConfidence,
+		(item) =>
+			item.evidence.kind === "artifact" &&
+			Boolean(item.evidence.sha256) &&
+			item.evidence.confidence >= directArtifactConfidence,
 	);
 	let status: SecurityVerificationRecord["status"] = "insufficient";
 	let reason = `Need ${minimumSources} independent sources with aggregate confidence >= ${minimumConfidence.toFixed(2)}`;
@@ -64,7 +67,10 @@ export function verifyHypothesis(
 	};
 }
 
-export function verifiedFindingGate(state: SecurityState, verificationId: string): { allowed: boolean; reason: string } {
+export function verifiedFindingGate(
+	state: SecurityState,
+	verificationId: string,
+): { allowed: boolean; reason: string } {
 	const verification = state.evidenceGraph.verifications.find((item) => item.id === verificationId);
 	if (!verification) return { allowed: false, reason: `Verification ${verificationId} does not exist` };
 	if (verification.status !== "verified")

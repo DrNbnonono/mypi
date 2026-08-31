@@ -41,5 +41,7 @@ describe("scope and policy", () => {
 			confirmedAt: "2026-08-30T00:00:00Z",
 		};
 		expect(canEnableAutonomous(state).allowed).toBe(true);
+		state.isolation = { status: "external", source: "organizer-lab" };
+		expect(canEnableAutonomous(state)).toMatchObject({ allowed: false });
 	});
 });

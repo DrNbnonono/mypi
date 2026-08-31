@@ -90,7 +90,7 @@ deterministic action-input builder
       v
 SecurityExecutionGateway
       |
-      +--> Scope hard invariant
+      +--> Scope block / autonomous warning
       +--> P0-P3 Risk Policy
       +--> Budget
       +--> adapter preconditions
@@ -155,7 +155,9 @@ Policy mode is independent of Coding/Sec Agent mode:
 - `competition`: P2 may proceed automatically, P3 still confirms;
 - `autonomous`: one recorded authorization replaces per-tool confirmation after isolation prerequisites are satisfied.
 
-Autonomous mode does not disable scope enforcement, OS/container isolation, protected credential paths, budgets, or audit. A new security task resets task-specific scope and autonomous authorization so authorization cannot leak across tasks.
+Strict and competition modes block execution outside explicit scope. Autonomous mode replaces that application-level block with a high-risk audit warning only after controlled isolation and one-time authorization are recorded. It does not disable OS/container isolation, protected credential paths, budgets, or audit. A new security task resets task-specific scope and autonomous authorization so authorization cannot leak across tasks.
+
+`/sec-doctor` and the Profile `run_diagnostics` command share one diagnostic service. It checks isolation, Sec-only runtime packages, specialist definitions, installed tool versions, and writable workspace/temp/report directories. Model connectivity is reported as an explicit unprobed warning so diagnostics never spend provider tokens.
 
 ## 9. Tool adapter boundary
 

@@ -1,115 +1,118 @@
 #!/usr/bin/env node
-"use strict";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { getUnsupportedNodeVersionMessage, isNodeVersionSupported } = require("./node-version");
+import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
+import { existsSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { getUnsupportedNodeVersionMessage, isNodeVersionSupported } from "./node-version.js";
+import { parseLaunchOptions } from "./pi-web-options.js";
+import { prepareRuntime } from "./prepare-runtime.js";
+import { wireChildProcessLifecycle } from "./process-lifecycle.js";
+import { getWebProcessEnvironment } from "./runtime-env.js";
 
-if (!isNodeVersionSupported(process.versions.node)) {
-  console.error(getUnsupportedNodeVersionMessage(process.versions.node));
-  process.exit(1);
-}
+const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const nextCommands = new Set(["dev", "start"]);
+const testGlobs = [
+  "app/**/*.test.mjs",
+  "components/**/*.test.mjs",
+  "hooks/**/*.test.mjs",
+  "lib/**/*.test.mjs",
+  "public/**/*.test.mjs",
+];
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { spawn } = require("child_process");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const path = require("path");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const fs = require("fs");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { parseLaunchOptions } = require("./pi-web-options");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { wireChildProcessLifecycle } = require("./process-lifecycle");
-
-const pkgDir = path.join(__dirname, "..");
-const nextDir = path.join(pkgDir, ".next");
-
-// Resolve next's CLI entry directly to avoid relying on .bin symlinks (which
-// may not exist when installed via npx).
-let nextBin;
-try {
-  nextBin = require.resolve("next/dist/bin/next", { paths: [pkgDir] });
-} catch {
-  // Fallback: locate next package root and derive the bin path manually.
+function resolveNextBin() {
+  const require = createRequire(import.meta.url);
   try {
-    const nextPkg = require.resolve("next/package.json", { paths: [pkgDir] });
-    nextBin = path.join(path.dirname(nextPkg), "dist", "bin", "next");
+    return require.resolve("next/dist/bin/next", { paths: [packageDir] });
   } catch {
-    nextBin = path.join(pkgDir, "node_modules", "next", "dist", "bin", "next");
+    const nextPackage = require.resolve("next/package.json", { paths: [packageDir] });
+    return path.join(path.dirname(nextPackage), "dist", "bin", "next");
   }
 }
 
-const { port, hostname, openBrowser } = parseLaunchOptions();
-const loopbackHostnames = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
-const passwordEnabled = Boolean(process.env.PI_WEB_PASSWORD);
-
-if (!fs.existsSync(nextDir)) {
-  console.error("Build artifacts not found. Please report this issue.");
-  process.exit(1);
-}
-
-if (!loopbackHostnames.has(hostname)) {
-  if (passwordEnabled) {
-    console.warn(
-      `Warning: pi-web is listening on ${hostname} with Basic Auth over HTTP. Use HTTPS or a trusted VPN to protect the password in transit.`,
-    );
-  } else {
-    console.warn(
-      `Warning: pi-web is listening on ${hostname} without authentication. Only use this on a trusted network.`,
-    );
+function openBrowser(url) {
+  if (process.platform === "win32") {
+    return spawn(process.env.ComSpec || "cmd.exe", ["/c", "start", "", url], { detached: true, stdio: "ignore" });
   }
+  if (process.platform === "darwin") return spawn("open", [url], { detached: true, stdio: "ignore" });
+  return spawn("xdg-open", [url], { detached: true, stdio: "ignore" });
 }
 
-const nextArgs = ["start", "-p", port];
-nextArgs.push("-H", hostname);
+function launchNext(command, args, env) {
+  const { port, hostname, openBrowser: shouldOpenBrowser } = parseLaunchOptions(args, env);
+  const nextArgs = [command, ...(command === "dev" ? ["--webpack"] : []), "-p", port, "-H", hostname];
+  const child = spawn(process.execPath, [resolveNextBin(), ...nextArgs], {
+    cwd: packageDir,
+    env: { ...env, PI_WEB_HOSTNAME: hostname },
+    stdio: ["inherit", "pipe", "inherit"],
+  });
+  wireChildProcessLifecycle(child);
 
-// Always run next's JS entry with node directly — avoids .bin symlink issues
-// and path-with-spaces problems on Windows when shell: true is used.
-const child = spawn(process.execPath, [nextBin, ...nextArgs], {
-  cwd: pkgDir,
-  stdio: ["inherit", "pipe", "inherit"],
-  env: { ...process.env, PI_WEB_HOSTNAME: hostname },
-});
-wireChildProcessLifecycle(child);
-
-let browserOpened = false;
-const url = `http://${hostname}:${port}`;
-
-child.stdout.on("data", (chunk) => {
-  const text = chunk.toString();
-  process.stdout.write(text);
-  if (openBrowser && !browserOpened && text.includes("Ready")) {
-    browserOpened = true;
-    const isWindows = process.platform === "win32";
-    const isMac = process.platform === "darwin";
-    // Avoid `shell: true` to suppress Node.js DEP0190 deprecation
-    // ("Passing args to a child process with shell option true can lead to
-    // security vulnerabilities, as the arguments are not escaped").
-    // Pass a structured argv so Node.js handles escaping instead of
-    // concatenating the args into a shell command string.
-    let opener;
-    if (isWindows) {
-      // `start` is a cmd.exe built-in, so invoke cmd directly. The empty
-      // title argument is required by `start` before the target URL.
-      opener = spawn(process.env.ComSpec || "cmd.exe", ["/c", "start", "", url], {
-        stdio: "ignore",
-        detached: true,
-      });
-    } else if (isMac) {
-      opener = spawn("open", [url], {
-        stdio: "ignore",
-        detached: true,
-      });
-    } else {
-      opener = spawn("xdg-open", [url], {
-        stdio: "ignore",
-        detached: true,
-      });
+  let browserOpened = false;
+  const url = `http://${hostname}:${port}`;
+  child.stdout.on("data", (chunk) => {
+    const text = chunk.toString();
+    process.stdout.write(text);
+    if (shouldOpenBrowser && !browserOpened && text.includes("Ready")) {
+      browserOpened = true;
+      const opener = openBrowser(url);
+      opener.on("error", (error) => console.warn(`Could not open browser automatically: ${error.message}`));
+      opener.unref();
     }
+  });
+}
 
-    opener.on("error", (error) => {
-      console.warn(`Could not open browser automatically: ${error.message}`);
-    });
+function launchTests(args, env) {
+  const targets = args.length > 0 && args.some((arg) => !arg.startsWith("-")) ? args : [...testGlobs, ...args];
+  const child = spawn(process.execPath, ["--experimental-strip-types", "--test", ...targets], {
+    cwd: packageDir,
+    env,
+    stdio: "inherit",
+  });
+  wireChildProcessLifecycle(child);
+}
 
-    opener.unref();
+function printWarningForLanHost(hostname, env) {
+  if (["127.0.0.1", "localhost", "::1", "[::1]"].includes(hostname)) return;
+  const message = env.PI_WEB_PASSWORD
+    ? "Pi Web is listening with Basic Auth over HTTP; use HTTPS or a trusted VPN."
+    : "Pi Web is listening without authentication; use this only on a trusted network.";
+  console.warn(`Warning: ${message}`);
+}
+
+function main(argv = process.argv.slice(2)) {
+  if (!isNodeVersionSupported(process.versions.node)) {
+    console.error(getUnsupportedNodeVersionMessage(process.versions.node));
+    process.exitCode = 1;
+    return;
   }
-});
+
+  const command = nextCommands.has(argv[0]) || argv[0] === "test" ? argv.shift() : "start";
+  const env = getWebProcessEnvironment(process.env, { tmpdir: os.tmpdir() });
+
+  if (command === "test") {
+    launchTests(argv, env);
+    return;
+  }
+
+  try {
+    prepareRuntime({ env });
+  } catch (error) {
+    console.error(`Unable to prepare Pi Web runtime: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (command === "start" && !existsSync(path.join(packageDir, ".next"))) {
+    console.error("Build artifacts not found. Run npm run build in packages/web-ui first.");
+    process.exitCode = 1;
+    return;
+  }
+  const { hostname } = parseLaunchOptions(argv, env);
+  printWarningForLanHost(hostname, env);
+  launchNext(command, argv, env);
+}
+
+main();

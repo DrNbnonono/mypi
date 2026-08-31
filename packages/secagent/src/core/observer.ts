@@ -22,7 +22,14 @@ export function observeSecurityState(state: SecurityState): SecurityObserverSign
 	const recent = state.decisions.slice(-5);
 	const failed = recent.filter((decision) => decision.resultStatus === "failed");
 	if (failed.length >= 3)
-		signals.push(signal("stalled", "warning", `${failed.length} of the last ${recent.length} decisions failed`, failed.map((item) => item.id)));
+		signals.push(
+			signal(
+				"stalled",
+				"warning",
+				`${failed.length} of the last ${recent.length} decisions failed`,
+				failed.map((item) => item.id),
+			),
+		);
 	const latest = recent.at(-1);
 	if (latest) {
 		const strategy = selectedStrategy(latest);
@@ -41,11 +48,32 @@ export function observeSecurityState(state: SecurityState): SecurityObserverSign
 	}
 	const pending = recent.filter((decision) => decision.resultStatus === "pending");
 	if (pending.length >= 3)
-		signals.push(signal("drift", "warning", "Multiple unresolved decisions indicate execution state drift", pending.map((item) => item.id)));
+		signals.push(
+			signal(
+				"drift",
+				"warning",
+				"Multiple unresolved decisions indicate execution state drift",
+				pending.map((item) => item.id),
+			),
+		);
 	if (budgetPressure(state.budget) >= 0.85)
-		signals.push(signal("context-pressure", "warning", "Execution budget is above 85%; prioritize high-confidence completion paths", recent.map((item) => item.id)));
+		signals.push(
+			signal(
+				"context-pressure",
+				"warning",
+				"Execution budget is above 85%; prioritize high-confidence completion paths",
+				recent.map((item) => item.id),
+			),
+		);
 	if (state.stage === "report" && state.evidenceGraph.verifications.some((item) => item.status === "insufficient"))
-		signals.push(signal("termination-risk", "warning", "Report stage reached with unresolved verification gaps", recent.map((item) => item.id)));
+		signals.push(
+			signal(
+				"termination-risk",
+				"warning",
+				"Report stage reached with unresolved verification gaps",
+				recent.map((item) => item.id),
+			),
+		);
 	return signals;
 }
 
@@ -72,7 +100,10 @@ export function buildOperationalMemory(state: SecurityState): OperationalMemory 
 	return {
 		facts,
 		ideas,
-		constraints: [...(state.task?.constraints ?? []), ...state.scope.targets.map((target) => `scope:${target.value}`)].slice(-12),
+		constraints: [
+			...(state.task?.constraints ?? []),
+			...state.scope.targets.map((target) => `scope:${target.value}`),
+		].slice(-12),
 		failures,
 	};
 }
@@ -87,10 +118,25 @@ export function assessTermination(state: SecurityState): TerminationAssessment {
 	const blockingVerificationIds = state.evidenceGraph.verifications
 		.filter((item) => item.status === "insufficient")
 		.map((item) => item.id);
-	if (state.ctfProfile && state.findings.some((finding) => finding.verified && /flag|capture|objective/i.test(finding.summary)))
-		return { complete: true, reason: "Verified CTF objective evidence has been recorded", blockingVerificationIds: [] };
-	if (state.task?.successCriteria.length && state.findings.some((finding) => finding.verified) && blockingVerificationIds.length === 0)
-		return { complete: true, reason: "Verified findings exist and no unresolved verification records remain", blockingVerificationIds };
+	if (
+		state.ctfProfile &&
+		state.findings.some((finding) => finding.verified && /flag|capture|objective/i.test(finding.summary))
+	)
+		return {
+			complete: true,
+			reason: "Verified CTF objective evidence has been recorded",
+			blockingVerificationIds: [],
+		};
+	if (
+		state.task?.successCriteria.length &&
+		state.findings.some((finding) => finding.verified) &&
+		blockingVerificationIds.length === 0
+	)
+		return {
+			complete: true,
+			reason: "Verified findings exist and no unresolved verification records remain",
+			blockingVerificationIds,
+		};
 	return {
 		complete: false,
 		reason: blockingVerificationIds.length

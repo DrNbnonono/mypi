@@ -34,7 +34,11 @@ describe("evidence graph verifier", () => {
 		state = applySecurityEvent(state, { type: "evidence_linked", edge, createdAt: edge.createdAt });
 		const verification = verifyHypothesis(state, hypothesis.id);
 		expect(verification.status).toBe("insufficient");
-		state = applySecurityEvent(state, { type: "hypothesis_verified", verification, createdAt: verification.createdAt });
+		state = applySecurityEvent(state, {
+			type: "hypothesis_verified",
+			verification,
+			createdAt: verification.createdAt,
+		});
 		expect(verifiedFindingGate(state, verification.id).allowed).toBe(false);
 	});
 
@@ -42,9 +46,21 @@ describe("evidence graph verifier", () => {
 		let state = createInitialSecurityState();
 		const hypothesis = createHypothesis("artifact fact");
 		state = applySecurityEvent(state, { type: "hypothesis_recorded", hypothesis, createdAt: hypothesis.createdAt });
-		const artifact: SecurityEvidence = { id: "a1", kind: "artifact", summary: "binary constant", source: "fixture.bin", sha256: "abc", confidence: 0.98, createdAt: "2026-08-30T00:00:00Z" };
+		const artifact: SecurityEvidence = {
+			id: "a1",
+			kind: "artifact",
+			summary: "binary constant",
+			source: "fixture.bin",
+			sha256: "abc",
+			confidence: 0.98,
+			createdAt: "2026-08-30T00:00:00Z",
+		};
 		state = applySecurityEvent(state, { type: "evidence_added", evidence: artifact, createdAt: artifact.createdAt });
-		const edge = createEvidenceEdge({ fromEvidenceId: artifact.id, toHypothesisId: hypothesis.id, relation: "verifies" });
+		const edge = createEvidenceEdge({
+			fromEvidenceId: artifact.id,
+			toHypothesisId: hypothesis.id,
+			relation: "verifies",
+		});
 		state = applySecurityEvent(state, { type: "evidence_linked", edge, createdAt: edge.createdAt });
 		expect(verifyHypothesis(state, hypothesis.id).status).toBe("verified");
 	});

@@ -35,7 +35,7 @@ Do not use `sqlmap`, credential spraying, exploit frameworks, destructive method
 
 ## Scope and policy constraints
 
-- Check every hostname, resolved address, port, scheme, redirect destination, API server, and callback against the current scope. Never follow a redirect or discovered subdomain as authorization.
+- Check every hostname, resolved address, port, scheme, redirect destination, API server, and callback against the current scope. Never treat a redirect or discovered subdomain as authorization. Strict and competition modes stop before an out-of-scope target; autonomous mode can proceed only through the coordinator's audited high-risk warning path after its isolation and authorization prerequisites are satisfied.
 - Start with passive/read-only requests: headers, TLS metadata, routes, methods, error handling, cookies, authentication boundary, and documented API behavior. Preserve request method, sanitized parameters, response status/headers summary, and body hash.
 - Before any state-changing, authenticated, high-volume, payload-bearing, or P2/P3 action, call `security_decide` with at least two alternatives. Follow strict/competition/autonomous policy and existing approval records; autonomous is valid only when the runtime has recorded its isolation and one-time authorization prerequisites.
 - Never bypass WAFs, access controls, rate limits, confirmation gates, sandbox, MCP policy, or scope checks. Do not use alternate encodings, redirects, DNS rebinding, or a second tool to evade a block.

@@ -1,0 +1,50 @@
+{
+	"schemaVersion": 1,
+	"offline": true,
+	"publicNetwork": false,
+	"allowedHosts": ["127.0.0.1", "localhost", "fixture-web"],
+	"tools": [
+		"nmap",
+		"curl",
+		"file",
+		"binutils",
+		"binwalk",
+		"libimage-exiftool-perl"
+	],
+	"fixtures": [
+		{
+			"id": "web-http",
+			"kind": "http-service",
+			"path": "web/http-server.mjs",
+			"bind": "container-internal",
+			"port": 8080,
+			"target": "http://fixture-web:8080/health"
+		},
+		{
+			"id": "network-discovery",
+			"kind": "network-target",
+			"path": "web/http-server.mjs",
+			"bind": "container-internal",
+			"target": "fixture-web",
+			"ports": [8080]
+		},
+		{
+			"id": "pwn-elf",
+			"kind": "elf-pwn-sample",
+			"path": "pwn/vulnerable.c",
+			"build": "gcc -O0 -g -fno-stack-protector -no-pie"
+		},
+		{
+			"id": "reverse-elf",
+			"kind": "elf-reverse-sample",
+			"path": "reverse/branchy.c",
+			"build": "gcc -O0 -g -fno-stack-protector -no-pie"
+		},
+		{
+			"id": "forensics-png",
+			"kind": "forensics-sample",
+			"path": "forensics/create-sample.mjs",
+			"build": "node forensics/create-sample.mjs"
+		}
+	]
+}

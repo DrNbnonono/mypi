@@ -106,14 +106,16 @@ export function scoreCandidate(action: CandidateActionInput, context: PlannerCon
 export function rankCandidates(candidates: CandidateActionInput[], context: PlannerContext = {}): ScoredAction[] {
 	const decisions = context.previousDecisions ?? context.state?.decisions ?? [];
 	const avoidStrategy = repeatedFailedStrategy(decisions);
-	return candidates.map((candidate) => scoreCandidate(candidate, context)).sort((left, right) => {
-		if (avoidStrategy) {
-			const leftRepeated = strategyKey(left) === avoidStrategy;
-			const rightRepeated = strategyKey(right) === avoidStrategy;
-			if (leftRepeated !== rightRepeated) return leftRepeated ? 1 : -1;
-		}
-		return right.score - left.score;
-	});
+	return candidates
+		.map((candidate) => scoreCandidate(candidate, context))
+		.sort((left, right) => {
+			if (avoidStrategy) {
+				const leftRepeated = strategyKey(left) === avoidStrategy;
+				const rightRepeated = strategyKey(right) === avoidStrategy;
+				if (leftRepeated !== rightRepeated) return leftRepeated ? 1 : -1;
+			}
+			return right.score - left.score;
+		});
 }
 
 export function riskScoreToLevel(risk: number): RiskLevel {
@@ -126,7 +128,12 @@ export function riskScoreToLevel(risk: number): RiskLevel {
 
 function decisionReplanAssessment(decisions: readonly SecurityDecision[]): ReplanAssessment {
 	const latest = decisions.at(-1);
-	if (!latest || latest.resultStatus === undefined || latest.resultStatus === "pending" || latest.resultStatus === "succeeded")
+	if (
+		!latest ||
+		latest.resultStatus === undefined ||
+		latest.resultStatus === "pending" ||
+		latest.resultStatus === "succeeded"
+	)
 		return { required: false };
 	const trigger: ReplanTrigger = latest.resultStatus === "contradicted" ? "decision-contradicted" : "decision-failed";
 	const strategy = selectedStrategy(latest);
@@ -153,7 +160,12 @@ export function assessReplanNeed(input: readonly SecurityDecision[] | SecuritySt
 	if (signal && (signal.kind === "drift" || signal.kind === "stalled" || signal.kind === "repeated-failure"))
 		return {
 			required: true,
-			trigger: signal.kind === "repeated-failure" ? "repeated-failure" : signal.kind === "drift" ? "observer-drift" : "decision-stalled",
+			trigger:
+				signal.kind === "repeated-failure"
+					? "repeated-failure"
+					: signal.kind === "drift"
+						? "observer-drift"
+						: "decision-stalled",
 			reason: signal.reason,
 			decisionId: signal.decisionIds.at(-1),
 		};

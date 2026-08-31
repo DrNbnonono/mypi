@@ -184,7 +184,14 @@ export function runSubagentDelegation(
 			finish(response);
 		});
 		const timer = setTimeout(
-			() => finish({ requestId: request.requestId, ownerRunId: request.ownerRunId, nodeId: request.nodeId, status: "timed_out", error: "SecAgent delegation bridge timed out waiting for pi-subagents" }),
+			() =>
+				finish({
+					requestId: request.requestId,
+					ownerRunId: request.ownerRunId,
+					nodeId: request.nodeId,
+					status: "timed_out",
+					error: "SecAgent delegation bridge timed out waiting for pi-subagents",
+				}),
 			(request.timeoutMs ?? 10 * 60_000) + 5_000,
 		);
 		bus.emit(SUBAGENT_DELEGATION_REQUEST_EVENT, request);
@@ -202,19 +209,22 @@ export function parseDelegatedAgentResult(response: SubagentDelegationResponse):
 	const record = value as Record<string, unknown>;
 	const status = record.status;
 	const summary = record.summary;
-	if (!(["completed", "partial", "blocked", "failed"] as const).includes(status as DelegatedAgentResult["status"])) return undefined;
+	if (!(["completed", "partial", "blocked", "failed"] as const).includes(status as DelegatedAgentResult["status"]))
+		return undefined;
 	if (typeof summary !== "string") return undefined;
 	const evidence = Array.isArray(record.evidence)
 		? record.evidence.flatMap((item) => {
-			if (!item || typeof item !== "object") return [];
-			const proposal = item as Record<string, unknown>;
-			if (typeof proposal.summary !== "string" || typeof proposal.confidence !== "number") return [];
-			return [{
-				summary: proposal.summary,
-				source: typeof proposal.source === "string" ? proposal.source : undefined,
-				confidence: Math.max(0, Math.min(1, proposal.confidence)),
-			}];
-		})
+				if (!item || typeof item !== "object") return [];
+				const proposal = item as Record<string, unknown>;
+				if (typeof proposal.summary !== "string" || typeof proposal.confidence !== "number") return [];
+				return [
+					{
+						summary: proposal.summary,
+						source: typeof proposal.source === "string" ? proposal.source : undefined,
+						confidence: Math.max(0, Math.min(1, proposal.confidence)),
+					},
+				];
+			})
 		: [];
 	return {
 		status: status as DelegatedAgentResult["status"],

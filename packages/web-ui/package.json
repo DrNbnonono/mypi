@@ -1,6 +1,7 @@
 {
   "name": "@agegr/pi-web",
   "version": "0.8.9",
+  "type": "module",
   "description": "Web UI for the pi coding agent",
   "homepage": "https://github.com/agegr/pi-web#readme",
   "repository": {
@@ -28,19 +29,20 @@
     "package.json"
   ],
   "scripts": {
-    "dev": "next dev -H 127.0.0.1 -p 30141",
-    "dev:lan": "next dev -H 0.0.0.0 -p 30141",
+    "dev": "node bin/pi-web.js dev",
+    "dev:lan": "node bin/pi-web.js dev -H 0.0.0.0",
     "build": "next build --webpack",
-    "start": "next start -H 127.0.0.1 -p 30141",
-    "start:lan": "next start -H 0.0.0.0 -p 30141",
+    "start": "node bin/pi-web.js start",
+    "start:lan": "node bin/pi-web.js start -H 0.0.0.0",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types --test \"app/**/*.test.mjs\" \"components/**/*.test.mjs\" \"hooks/**/*.test.mjs\" \"lib/**/*.test.mjs\" \"public/**/*.test.mjs\"",
+    "test": "node bin/pi-web.js test",
     "release": "npm version patch --no-git-tag-version && npm run build && npm publish --access public"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.84.2",
     "@earendil-works/pi-ai": "0.84.2",
     "@earendil-works/pi-coding-agent": "0.84.2",
+    "@earendil-works/pi-secagent": "0.84.2",
     "@earendil-works/pi-tui": "0.84.2",
     "js-yaml": "5.3.0",
     "next": "16.3.1",

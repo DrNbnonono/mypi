@@ -33,7 +33,9 @@ export function summarizeCapabilityCoverage(state: SecurityState): CapabilityCov
 		else current.pending += 1;
 		coverage.set(key, current);
 	}
-	return [...coverage.values()].sort((left, right) => right.attempts - left.attempts || left.key.localeCompare(right.key));
+	return [...coverage.values()].sort(
+		(left, right) => right.attempts - left.attempts || left.key.localeCompare(right.key),
+	);
 }
 
 export function prioritizeCapabilityHints(state: SecurityState, hints: readonly string[], limit = 4): string[] {

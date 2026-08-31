@@ -1,6 +1,6 @@
+import type { SecAgentRuntime } from "../runtime.ts";
 import { createEvidenceEdge, createHypothesis } from "./evidence-graph.ts";
 import type { SecurityHypothesisRecord } from "./types.ts";
-import type { SecAgentRuntime } from "../runtime.ts";
 
 export interface OperationalEvidencePromotion {
 	hypothesisIds: string[];
@@ -15,13 +15,20 @@ function selectedCapability(runtime: SecAgentRuntime, decisionId: string): strin
 
 function hypothesisFamily(capability: string): { key: string; statement: string } {
 	if (capability === "network-enumeration")
-		return { key: "network-surface", statement: "The authorized target exposes an observable network service surface." };
+		return {
+			key: "network-surface",
+			statement: "The authorized target exposes an observable network service surface.",
+		};
 	if (capability === "web-enumeration" || capability === "web-request-analysis")
-		return { key: "http-surface", statement: "The authorized target exposes a reproducibly observable HTTP service surface." };
+		return {
+			key: "http-surface",
+			statement: "The authorized target exposes a reproducibly observable HTTP service surface.",
+		};
 	if (capability === "vulnerability-verification")
 		return {
 			key: "candidate-vulnerability-signal",
-			statement: "The authorized target produced a reproducible candidate vulnerability signal that still requires finding-level confirmation.",
+			statement:
+				"The authorized target produced a reproducible candidate vulnerability signal that still requires finding-level confirmation.",
 		};
 	if (["artifact-triage", "binary-triage", "reverse-analysis", "forensics-triage"].includes(capability))
 		return {
@@ -44,8 +51,10 @@ function targetSignature(runtime: SecAgentRuntime, decisionId: string): string {
 		.map((item) => item.trim())
 		.filter(Boolean);
 	const selectedTargets = selected?.targets ?? [];
-	const values = [...new Set([...evidenceTargets, ...selectedTargets].map((item) => item.trim()).filter(Boolean))].sort();
-	return values.length > 0 ? values.join(" | ") : state.task?.id ?? "current-task";
+	const values = [
+		...new Set([...evidenceTargets, ...selectedTargets].map((item) => item.trim()).filter(Boolean)),
+	].sort();
+	return values.length > 0 ? values.join(" | ") : (state.task?.id ?? "current-task");
 }
 
 export function promoteOperationalEvidence(runtime: SecAgentRuntime, decisionId: string): OperationalEvidencePromotion {
@@ -58,7 +67,9 @@ export function promoteOperationalEvidence(runtime: SecAgentRuntime, decisionId:
 	if (!capability) return { hypothesisIds: [], edgeIds: [] };
 	const family = hypothesisFamily(capability);
 	const statement = `${family.statement} [family=${family.key}; target=${targetSignature(runtime, decisionId)}]`;
-	let hypothesis: SecurityHypothesisRecord | undefined = snapshot.evidenceGraph.hypotheses.find((item) => item.statement === statement);
+	let hypothesis: SecurityHypothesisRecord | undefined = snapshot.evidenceGraph.hypotheses.find(
+		(item) => item.statement === statement,
+	);
 	const hypothesisIds: string[] = [];
 	const edgeIds: string[] = [];
 	if (!hypothesis) {
@@ -69,7 +80,8 @@ export function promoteOperationalEvidence(runtime: SecAgentRuntime, decisionId:
 	for (const item of evidence) {
 		const current = runtime.snapshot().state;
 		const exists = current.evidenceGraph.edges.some(
-			(edge) => edge.fromEvidenceId === item.id && edge.toHypothesisId === hypothesis?.id && edge.relation === "supports",
+			(edge) =>
+				edge.fromEvidenceId === item.id && edge.toHypothesisId === hypothesis?.id && edge.relation === "supports",
 		);
 		if (exists) continue;
 		const edge = createEvidenceEdge({

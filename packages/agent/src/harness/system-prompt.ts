@@ -1,5 +1,5 @@
 import type { Skill } from "./types.ts";
-
+// 系统提示词基线
 export function formatSkillsForSystemPrompt(skills: Skill[]): string {
 	const visibleSkills = skills.filter((skill) => !skill.disableModelInvocation);
 	if (visibleSkills.length === 0) return "";

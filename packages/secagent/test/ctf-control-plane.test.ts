@@ -7,9 +7,29 @@ import { createCtfChallengeProfile, inferCtfChallengeKind } from "../src/ctf/cap
 
 function failed(id: string): SecurityDecision {
 	return {
-		id, createdAt: "2026-08-30T00:00:00Z", goal: "fixture", stage: "analysis", evidenceIds: [],
-		candidates: [{ id: `${id}-a`, tool: "curl", capability: "web-request-analysis", description: "repeat", goalRelevance: 1, informationGain: 1, confidence: 1, cost: 0.1, preconditions: [], risk: 0.1, score: 0.8 }],
-		selectedActionId: `${id}-a`, resultStatus: "failed", actualResult: "no progress",
+		id,
+		createdAt: "2026-08-30T00:00:00Z",
+		goal: "fixture",
+		stage: "analysis",
+		evidenceIds: [],
+		candidates: [
+			{
+				id: `${id}-a`,
+				tool: "curl",
+				capability: "web-request-analysis",
+				description: "repeat",
+				goalRelevance: 1,
+				informationGain: 1,
+				confidence: 1,
+				cost: 0.1,
+				preconditions: [],
+				risk: 0.1,
+				score: 0.8,
+			},
+		],
+		selectedActionId: `${id}-a`,
+		resultStatus: "failed",
+		actualResult: "no progress",
 	};
 }
 

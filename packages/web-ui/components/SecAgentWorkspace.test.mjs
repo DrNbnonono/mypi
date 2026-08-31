@@ -13,6 +13,8 @@ test("uses the Profile GET snapshot and POST command contract", () => {
   assert.match(componentSource, /body: JSON\.stringify\(body\)/);
   assert.match(profileRouteSource, /session\.send\(\{ type: "profile_snapshot" \}\)/);
   assert.match(profileRouteSource, /session\.send\(\{ type: "profile_command", command \}\)/);
+	assert.match(profileRouteSource, /Unsupported profile command/);
+	assert.match(profileRouteSource, /status: 400/);
 });
 
 test("rejects malformed profile data and hides the workspace for coding sessions", () => {
@@ -63,6 +65,13 @@ test("supports report preview and client download for both formats", () => {
   assert.match(componentSource, /text\/markdown/);
   assert.match(componentSource, /link\.download = `secagent-report\./);
   assert.match(componentSource, /<pre[\s\S]*report\.content/);
+});
+
+test("runs structured SecAgent diagnostics and renders every check", () => {
+  assert.match(componentSource, /type: "run_diagnostics"/);
+  assert.match(componentSource, /isSecAgentDiagnostics\(value\)/);
+  assert.match(componentSource, /Environment diagnostics/);
+  assert.match(componentSource, /diagnostics\?\.checks\.map/);
 });
 
 test("renders loading, empty, API error, and SSE error states", () => {

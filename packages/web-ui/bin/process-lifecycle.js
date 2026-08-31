@@ -1,7 +1,4 @@
-"use strict";
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const os = require("node:os");
+import os from "node:os";
 
 const forwardedSignals = ["SIGINT", "SIGTERM"];
 const shutdownTimeoutMs = 5_000;
@@ -43,4 +40,4 @@ function wireChildProcessLifecycle(child, parentProcess = process, timeoutMs = s
   });
 }
 
-module.exports = { wireChildProcessLifecycle };
+export { wireChildProcessLifecycle };

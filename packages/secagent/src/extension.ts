@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { StringEnum } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, InlineExtension } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { formatAuditRecords, summarizeUnknown } from "./core/audit.ts";
 import { rankCandidates, riskScoreToLevel } from "./core/planner.ts";
@@ -21,6 +20,7 @@ import type {
 	ToolAuditRecord,
 	ToolCategory,
 } from "./core/types.ts";
+import { defineSecAgentExtension, type SecAgentExtensionAPI, type SecAgentInlineExtension } from "./host-contract.ts";
 import { createSecurityTaskSpec } from "./intake/intake.ts";
 import { buildSecurityReportJson, buildSecurityReportMarkdown } from "./report/generator.ts";
 import type { SecAgentRuntime } from "./runtime.ts";
@@ -185,11 +185,11 @@ function buildScope(targetValues: string[], note?: string, authorizationSource?:
 	};
 }
 
-export function createSecAgentExtension(runtime: SecAgentRuntime): InlineExtension {
-	return { name: "secagent", factory: (pi) => registerSecAgent(pi, runtime) };
+export function createSecAgentExtension(runtime: SecAgentRuntime): SecAgentInlineExtension {
+	return defineSecAgentExtension("secagent", (pi) => registerSecAgent(pi, runtime));
 }
 
-function registerSecAgent(pi: ExtensionAPI, runtime: SecAgentRuntime): void {
+function registerSecAgent(pi: SecAgentExtensionAPI, runtime: SecAgentRuntime): void {
 	const gateway = new SecurityExecutionGateway(runtime);
 	const pendingAudit = new Map<string, ToolAuditRecord>();
 	let unsubscribeStatus: (() => void) | undefined;
@@ -448,7 +448,8 @@ function registerSecAgent(pi: ExtensionAPI, runtime: SecAgentRuntime): void {
 	pi.registerTool<typeof ExecuteParams, SecurityToolExecutionResult>({
 		name: "security_execute",
 		label: "Security Execute",
-		description: "Execute a registered security adapter through decision, scope, policy, isolation, evidence, and audit gates.",
+		description:
+			"Execute a registered security adapter through decision, scope, policy, isolation, evidence, and audit gates.",
 		promptSnippet: "security_execute: run the selected audited adapter for an existing decision",
 		parameters: ExecuteParams,
 		async execute(_id, params, signal, _update, ctx) {
@@ -619,6 +620,17 @@ function registerSecAgent(pi: ExtensionAPI, runtime: SecAgentRuntime): void {
 				args.trim() === "json" ? buildSecurityReportJson(state, audit) : buildSecurityReportMarkdown(state, audit);
 			if (ctx.hasUI) await ctx.ui.editor("SecAgent report", report);
 			else ctx.ui.notify(report, "info");
+		},
+	});
+	pi.registerCommand("sec-doctor", {
+		description: "Check SecAgent isolation, runtime packages, specialist agents, tools, and writable directories",
+		handler: async (_args, ctx) => {
+			const diagnostics = await runtime.runDiagnostics();
+			const text = diagnostics.checks
+				.map((check) => `${check.status.toUpperCase().padEnd(4)} ${check.label}: ${check.message}`)
+				.join("\n");
+			if (ctx.hasUI) await ctx.ui.editor("SecAgent diagnostics", text);
+			else ctx.ui.notify(text, diagnostics.ready ? "info" : "warning");
 		},
 	});
 }

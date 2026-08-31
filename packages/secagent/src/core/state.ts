@@ -36,15 +36,24 @@ function cloneState(state: SecurityState): SecurityState {
 		revision: state.revision + 1,
 		isolation: { ...state.isolation },
 		scope: { ...state.scope, targets: state.scope.targets.map((target) => ({ ...target })) },
-		evidence: state.evidence.map((item) => ({ ...item, decisionIds: item.decisionIds ? [...item.decisionIds] : undefined })),
+		evidence: state.evidence.map((item) => ({
+			...item,
+			decisionIds: item.decisionIds ? [...item.decisionIds] : undefined,
+		})),
 		evidenceGraph: {
 			edges: state.evidenceGraph.edges.map((edge) => ({ ...edge })),
 			hypotheses: state.evidenceGraph.hypotheses.map((hypothesis) => ({ ...hypothesis })),
-			verifications: state.evidenceGraph.verifications.map((verification) => ({ ...verification, evidenceIds: [...verification.evidenceIds] })),
+			verifications: state.evidenceGraph.verifications.map((verification) => ({
+				...verification,
+				evidenceIds: [...verification.evidenceIds],
+			})),
 		},
 		hypotheses: [...state.hypotheses],
 		rejectedHypotheses: [...state.rejectedHypotheses],
-		findings: state.findings.map((item) => ({ ...item, evidenceIds: item.evidenceIds ? [...item.evidenceIds] : undefined })),
+		findings: state.findings.map((item) => ({
+			...item,
+			evidenceIds: item.evidenceIds ? [...item.evidenceIds] : undefined,
+		})),
 		decisions: state.decisions.map((decision) => ({
 			...decision,
 			evidenceIds: [...decision.evidenceIds],
@@ -87,6 +96,8 @@ export function applySecurityEvent(state: SecurityState, event: SecurityEvent): 
 			next.policyMode = event.mode;
 			return next;
 		case "isolation_changed":
+			if (next.isolation.status !== event.isolation.status || next.isolation.source !== event.isolation.source)
+				next.autonomousAuthorization = undefined;
 			next.isolation = { ...event.isolation };
 			return next;
 		case "autonomous_authorized":
@@ -119,22 +130,37 @@ export function applySecurityEvent(state: SecurityState, event: SecurityEvent): 
 			if (!next.hypotheses.includes(event.hypothesis.statement)) next.hypotheses.push(event.hypothesis.statement);
 			return next;
 		case "hypothesis_verified": {
-			next.evidenceGraph.verifications.push({ ...event.verification, evidenceIds: [...event.verification.evidenceIds] });
+			next.evidenceGraph.verifications.push({
+				...event.verification,
+				evidenceIds: [...event.verification.evidenceIds],
+			});
 			const hypothesis = next.evidenceGraph.hypotheses.find((item) => item.id === event.verification.hypothesisId);
 			if (hypothesis) {
-				hypothesis.status = event.verification.status === "verified" ? "verified" : event.verification.status === "contradicted" ? "contradicted" : "active";
+				hypothesis.status =
+					event.verification.status === "verified"
+						? "verified"
+						: event.verification.status === "contradicted"
+							? "contradicted"
+							: "active";
 				hypothesis.updatedAt = event.createdAt;
-				if (hypothesis.status !== "active") next.hypotheses = next.hypotheses.filter((item) => item !== hypothesis.statement);
+				if (hypothesis.status !== "active")
+					next.hypotheses = next.hypotheses.filter((item) => item !== hypothesis.statement);
 				if (hypothesis.status === "contradicted" && !next.rejectedHypotheses.includes(hypothesis.statement))
 					next.rejectedHypotheses.push(hypothesis.statement);
 			}
 			return next;
 		}
 		case "finding_added":
-			next.findings.push({ ...event.finding, evidenceIds: event.finding.evidenceIds ? [...event.finding.evidenceIds] : undefined });
+			next.findings.push({
+				...event.finding,
+				evidenceIds: event.finding.evidenceIds ? [...event.finding.evidenceIds] : undefined,
+			});
 			return next;
 		case "decision_recorded":
-			next.decisions.push({ ...event.decision, candidates: event.decision.candidates.map((candidate) => ({ ...candidate })) });
+			next.decisions.push({
+				...event.decision,
+				candidates: event.decision.candidates.map((candidate) => ({ ...candidate })),
+			});
 			return next;
 		case "decision_completed": {
 			const decision = next.decisions.find((item) => item.id === event.decisionId);
@@ -181,7 +207,11 @@ export function replaySecurityState(store: SecuritySessionStore): SecurityState 
 	return state;
 }
 
-export function appendSecurityEvent(store: SecuritySessionStore, state: SecurityState, event: SecurityEvent): SecurityState {
+export function appendSecurityEvent(
+	store: SecuritySessionStore,
+	state: SecurityState,
+	event: SecurityEvent,
+): SecurityState {
 	store.appendCustomEntry(SECURITY_EVENT_ENTRY, event);
 	return applySecurityEvent(state, event);
 }

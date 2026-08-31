@@ -11,8 +11,8 @@ function firstArtifactPath(state: SecurityState): string | undefined {
 }
 
 function wordlistPath(state: SecurityState): string | undefined {
-	return state.task?.assets.find((asset) =>
-		Boolean(asset.path) && /(?:wordlist|paths?|dirs?|content|fuzz)/i.test(asset.name),
+	return state.task?.assets.find(
+		(asset) => Boolean(asset.path) && /(?:wordlist|paths?|dirs?|content|fuzz)/i.test(asset.name),
 	)?.path;
 }
 
@@ -57,7 +57,9 @@ export function buildDefaultActionInput(state: SecurityState, action: CandidateA
 		case "nmap": {
 			if (!networkTarget) return { ok: false, reason: "nmap requires an authorized network target" };
 			const target = asHostTarget(networkTarget);
-			return target ? { ok: true, input: { target, timing: 3, serviceDetection: true } } : { ok: false, reason: "nmap target could not be normalized" };
+			return target
+				? { ok: true, input: { target, timing: 3, serviceDetection: true } }
+				: { ok: false, reason: "nmap target could not be normalized" };
 		}
 		case "curl":
 		case "httpx":
@@ -78,16 +80,26 @@ export function buildDefaultActionInput(state: SecurityState, action: CandidateA
 			return { ok: true, input: { target, wordlist, threads: 20, rate: 50 } };
 		}
 		case "file":
-			return artifactPath ? { ok: true, input: { path: artifactPath } } : { ok: false, reason: "file requires a local artifact" };
+			return artifactPath
+				? { ok: true, input: { path: artifactPath } }
+				: { ok: false, reason: "file requires a local artifact" };
 		case "strings":
-			return artifactPath ? { ok: true, input: { path: artifactPath, minLength: 4 } } : { ok: false, reason: "strings requires a local artifact" };
+			return artifactPath
+				? { ok: true, input: { path: artifactPath, minLength: 4 } }
+				: { ok: false, reason: "strings requires a local artifact" };
 		case "readelf":
-			return artifactPath ? { ok: true, input: { path: artifactPath, action: "security" } } : { ok: false, reason: "readelf requires a local artifact" };
+			return artifactPath
+				? { ok: true, input: { path: artifactPath, action: "security" } }
+				: { ok: false, reason: "readelf requires a local artifact" };
 		case "objdump":
-			return artifactPath ? { ok: true, input: { path: artifactPath, action: "disassemble" } } : { ok: false, reason: "objdump requires a local artifact" };
+			return artifactPath
+				? { ok: true, input: { path: artifactPath, action: "disassemble" } }
+				: { ok: false, reason: "objdump requires a local artifact" };
 		case "binwalk":
 		case "exiftool":
-			return artifactPath ? { ok: true, input: { path: artifactPath } } : { ok: false, reason: `${action.tool} requires a local artifact` };
+			return artifactPath
+				? { ok: true, input: { path: artifactPath } }
+				: { ok: false, reason: `${action.tool} requires a local artifact` };
 		default:
 			return { ok: false, reason: `no deterministic autonomous input builder is registered for ${action.tool}` };
 	}

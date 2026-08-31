@@ -196,14 +196,16 @@ export async function runStandardTool(options: {
 				result.exitCode === 0
 					? undefined
 					: { code: "execution", message: summary, command: options.command, exitCode: result.exitCode },
-			evidence: [{
-				summary,
-				source: options.evidence?.source ?? options.command,
-				confidence: result.exitCode === 0 ? 0.9 : 0.4,
-				kind: options.evidence?.kind,
-				sha256: options.evidence?.sha256,
-				targetRefs: options.evidence?.targetRefs ?? [...options.targets],
-			}],
+			evidence: [
+				{
+					summary,
+					source: options.evidence?.source ?? options.command,
+					confidence: result.exitCode === 0 ? 0.9 : 0.4,
+					kind: options.evidence?.kind,
+					sha256: options.evidence?.sha256,
+					targetRefs: options.evidence?.targetRefs ?? [...options.targets],
+				},
+			],
 		};
 	} catch (error) {
 		return diagnosticResult({

@@ -39,6 +39,7 @@ export type {
 	TypedSpanStarter,
 } from "@earendil-works/pi-telemetry";
 
+// ai当前的临时缓存
 export const AI_TELEMETRY_SCHEMA = {
 	version: 1,
 	spans: {
@@ -144,6 +145,7 @@ export function startAiSpan<Name extends AiSpanName, const Attributes extends Ai
 	return telemetryContext.startSpan({ name, attributes }, (span) => callback(span as AiTelemetrySpan<Name>));
 }
 
+// 11个事件插入hook的位置
 const HOOK_NAMES = [
 	"before_run",
 	"before_resume",
@@ -158,6 +160,7 @@ const HOOK_NAMES = [
 	"before_navigation",
 ] as const;
 
+// 25个事件插入event_handler的位置
 const EVENT_TYPES = [
 	"run_start",
 	"run_resume",
@@ -190,6 +193,7 @@ const EVENT_TYPES = [
 	"usage",
 ] as const;
 
+// 操作开始属性
 const operationStartAttributes = {
 	"pi.session.id": {
 		type: "string",
@@ -216,6 +220,7 @@ const operationStartAttributes = {
 	},
 } as const;
 
+// 操作错误属性
 const operationErrorAttributes = {
 	"pi.error.code": {
 		type: "string",
@@ -229,6 +234,7 @@ const operationErrorAttributes = {
 	},
 } as const;
 
+// harness当前的临时缓存 
 export const HARNESS_TELEMETRY_SCHEMA = {
 	version: 1,
 	spans: {
@@ -572,6 +578,7 @@ export const HARNESS_TELEMETRY_SCHEMA = {
 } as const satisfies TelemetrySchemaDefinition;
 
 /** Combined typed span vocabulary for agent-owned AI-request and harness telemetry. */
+// 向外导出
 export const AGENT_TELEMETRY_SCHEMAS = [AI_TELEMETRY_SCHEMA, HARNESS_TELEMETRY_SCHEMA] as const;
 
 export type HarnessSpanName = TelemetrySchemaSpanName<typeof HARNESS_TELEMETRY_SCHEMA>;

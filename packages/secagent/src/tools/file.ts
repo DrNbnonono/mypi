@@ -53,7 +53,9 @@ async function executeLocal(
 	try {
 		artifactSha256 = await sha256File(checked.path);
 	} catch (error) {
-		return preconditionResult(`unable to hash local artifact: ${error instanceof Error ? error.message : String(error)}`);
+		return preconditionResult(
+			`unable to hash local artifact: ${error instanceof Error ? error.message : String(error)}`,
+		);
 	}
 	return runStandardTool({
 		metadata,

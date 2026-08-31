@@ -1,17 +1,17 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AutonomousSearchLoop, type AutonomousRunResult } from "../core/autonomous-loop.ts";
+import { type AutonomousRunResult, AutonomousSearchLoop } from "../core/autonomous-loop.ts";
 import { createInitialSecurityState, type SecuritySessionStore } from "../core/state.ts";
 import type { CtfChallengeProfile, SecurityInputAsset, SecurityState } from "../core/types.ts";
 import { SecAgentRuntime } from "../runtime.ts";
 import type { SecurityToolCommandResult, SecurityToolExecutor } from "../tools/adapter.ts";
 import { SecurityExecutionGateway } from "../tools/gateway.ts";
 import {
-	controlledBenchmarkDefinition,
-	evaluateControlledScenario,
 	type ControlledScenarioBenchmarkDefinition,
 	type ControlledScenarioEvaluation,
+	controlledBenchmarkDefinition,
+	evaluateControlledScenario,
 } from "./controlled.ts";
 
 class MemorySecuritySessionStore implements SecuritySessionStore {
@@ -41,7 +41,8 @@ class ControlledScenarioExecutor implements SecurityToolExecutor {
 		_options: { cwd: string; signal?: AbortSignal; timeoutMs: number },
 	): Promise<SecurityToolCommandResult> {
 		this.calls.push({ command, args: [...args] });
-		const versionCheck = args.includes("--version") || args.includes("-V") || args.includes("-version") || args.includes("version");
+		const versionCheck =
+			args.includes("--version") || args.includes("-V") || args.includes("-version") || args.includes("version");
 		if (versionCheck) return Promise.resolve(result(versionOutput(command)));
 		if (this.failOnce.delete(command)) return Promise.resolve(result("", 2, "controlled injected failure"));
 		return Promise.resolve(result(toolOutput(command)));
@@ -54,18 +55,30 @@ function result(stdout: string, exitCode = 0, stderr = ""): SecurityToolCommandR
 
 function versionOutput(command: string): string {
 	switch (command) {
-		case "nmap": return "Nmap version 7.95";
-		case "curl": return "curl 8.8.0";
-		case "httpx": return "httpx version 1.6.10";
-		case "ffuf": return "ffuf version 2.1.0";
-		case "nuclei": return "nuclei version 3.3.0";
-		case "file": return "file-5.45";
-		case "strings": return "GNU strings 2.42";
-		case "readelf": return "GNU readelf 2.42";
-		case "objdump": return "GNU objdump 2.42";
-		case "binwalk": return "Binwalk v2.3.4";
-		case "exiftool": return "12.76";
-		default: return `${command} 1.0`;
+		case "nmap":
+			return "Nmap version 7.95";
+		case "curl":
+			return "curl 8.8.0";
+		case "httpx":
+			return "httpx version 1.6.10";
+		case "ffuf":
+			return "ffuf version 2.1.0";
+		case "nuclei":
+			return "nuclei version 3.3.0";
+		case "file":
+			return "file-5.45";
+		case "strings":
+			return "GNU strings 2.42";
+		case "readelf":
+			return "GNU readelf 2.42";
+		case "objdump":
+			return "GNU objdump 2.42";
+		case "binwalk":
+			return "Binwalk v2.3.4";
+		case "exiftool":
+			return "12.76";
+		default:
+			return `${command} 1.0`;
 	}
 }
 
@@ -117,7 +130,10 @@ async function createScenarioState(
 	const createdAt = new Date().toISOString();
 	const assets: SecurityInputAsset[] = [];
 	if (definition.requiresArtifact) {
-		await writeFile(join(cwd, "sample.bin"), Buffer.from("ELF\0controlled-marker\0flag{controlled_fixture}\0", "utf8"));
+		await writeFile(
+			join(cwd, "sample.bin"),
+			Buffer.from("ELF\0controlled-marker\0flag{controlled_fixture}\0", "utf8"),
+		);
 		assets.push({ id: "artifact", name: "sample.bin", kind: "unknown" as const, path: "sample.bin" });
 	}
 	if (definition.id === "web" || definition.id === "killchain") {
@@ -155,7 +171,13 @@ function seedRuntime(runtime: SecAgentRuntime, state: SecurityState): void {
 	const createdAt = state.task.createdAt;
 	runtime.append({ type: "task_started", task: state.task, createdAt });
 	runtime.append({ type: "isolation_changed", isolation: state.isolation, createdAt });
-	runtime.append({ type: "policy_changed", mode: "competition", operator: "controlled-harness", reason: "deterministic isolated benchmark", createdAt });
+	runtime.append({
+		type: "policy_changed",
+		mode: "competition",
+		operator: "controlled-harness",
+		reason: "deterministic isolated benchmark",
+		createdAt,
+	});
 	if (state.scope.targets.length > 0) runtime.append({ type: "scope_set", scope: state.scope, createdAt });
 	if (state.ctfProfile) runtime.append({ type: "ctf_profiled", profile: state.ctfProfile, createdAt });
 	runtime.append({ type: "stage_changed", stage: state.stage, createdAt });
@@ -222,13 +244,15 @@ export async function runControlledScenarioBenchmark(
 		const trace = snapshot.decisions.flatMap((decision) => {
 			const selected = decision.candidates.find((candidate) => candidate.id === decision.selectedActionId);
 			if (!selected) return [];
-			return [{
-				decisionId: decision.id,
-				tool: selected.tool,
-				capability: selected.capability ?? selected.tool,
-				status: decision.resultStatus ?? "pending",
-				evidenceCount: snapshot.evidence.filter((item) => item.decisionIds?.includes(decision.id)).length,
-			}];
+			return [
+				{
+					decisionId: decision.id,
+					tool: selected.tool,
+					capability: selected.capability ?? selected.tool,
+					status: decision.resultStatus ?? "pending",
+					evidenceCount: snapshot.evidence.filter((item) => item.decisionIds?.includes(decision.id)).length,
+				},
+			];
 		});
 		return {
 			definition,
@@ -236,7 +260,9 @@ export async function runControlledScenarioBenchmark(
 			evaluation,
 			metrics: {
 				decisions: snapshot.decisions.length,
-				failedDecisions: snapshot.decisions.filter((item) => item.resultStatus === "failed" || item.resultStatus === "contradicted").length,
+				failedDecisions: snapshot.decisions.filter(
+					(item) => item.resultStatus === "failed" || item.resultStatus === "contradicted",
+				).length,
 				replans: snapshot.replans.length,
 				evidence: snapshot.evidence.length,
 				verifications: snapshot.evidenceGraph.verifications.length,

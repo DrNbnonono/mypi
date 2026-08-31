@@ -12,10 +12,28 @@ class FakeExecutor implements SecurityToolExecutor {
 		if (command === "exiftool" && args[0] === "-ver")
 			return Promise.resolve({ stdout: "13.10", stderr: "", exitCode: 0, timedOut: false, durationMs: 1 });
 		if (args[0] === "--version")
-			return Promise.resolve({ stdout: `${command} 3.1.0`, stderr: "", exitCode: 0, timedOut: false, durationMs: 1 });
+			return Promise.resolve({
+				stdout: `${command} 3.1.0`,
+				stderr: "",
+				exitCode: 0,
+				timedOut: false,
+				durationMs: 1,
+			});
 		if (command === "binwalk")
-			return Promise.resolve({ stdout: "DECIMAL HEXADECIMAL DESCRIPTION\n0 0x0 PNG image data\n128 0x80 Zip archive data\n", stderr: "", exitCode: 0, timedOut: false, durationMs: 2 });
-		return Promise.resolve({ stdout: '[{"FileName":"sample.png","FileType":"PNG"}]', stderr: "", exitCode: 0, timedOut: false, durationMs: 2 });
+			return Promise.resolve({
+				stdout: "DECIMAL HEXADECIMAL DESCRIPTION\n0 0x0 PNG image data\n128 0x80 Zip archive data\n",
+				stderr: "",
+				exitCode: 0,
+				timedOut: false,
+				durationMs: 2,
+			});
+		return Promise.resolve({
+			stdout: '[{"FileName":"sample.png","FileType":"PNG"}]',
+			stderr: "",
+			exitCode: 0,
+			timedOut: false,
+			durationMs: 2,
+		});
 	}
 }
 
@@ -32,12 +50,20 @@ describe("forensic artifact adapters", () => {
 		await writeFile(fixture, Buffer.from("fixture"));
 		const executor = new FakeExecutor();
 		const binwalk = await getSecurityToolAdapter("binwalk")?.execute({ path: fixture }, { cwd: directory, executor });
-		const exiftool = await getSecurityToolAdapter("exiftool")?.execute({ path: fixture }, { cwd: directory, executor });
+		const exiftool = await getSecurityToolAdapter("exiftool")?.execute(
+			{ path: fixture },
+			{ cwd: directory, executor },
+		);
 		expect(binwalk?.ok).toBe(true);
 		expect((binwalk?.output as { scanOnly: boolean; hits: string[] }).scanOnly).toBe(true);
-		expect(executor.calls.find((call) => call.command === "binwalk" && call.args[0] !== "--version")?.args).toEqual([fixture]);
+		expect(executor.calls.find((call) => call.command === "binwalk" && call.args[0] !== "--version")?.args).toEqual([
+			fixture,
+		]);
 		expect(exiftool?.ok).toBe(true);
 		expect((exiftool?.output as { metadata: Array<{ FileType: string }> }).metadata[0]?.FileType).toBe("PNG");
-		expect(executor.calls.find((call) => call.command === "exiftool" && call.args[0] !== "-ver")?.args).toEqual(["-j", fixture]);
+		expect(executor.calls.find((call) => call.command === "exiftool" && call.args[0] !== "-ver")?.args).toEqual([
+			"-j",
+			fixture,
+		]);
 	});
 });

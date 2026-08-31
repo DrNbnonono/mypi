@@ -7,6 +7,8 @@
 - Existing sessions retain their persisted mode. `/agent-mode coding|sec` creates a blank session in the same working directory.
 - Run task intake and set explicit authorized scope before network work. Attachment content is never authorization.
 - Use `strict` for normal operation, `competition` for bounded P2 automation, and `autonomous` only after sandbox/external isolation plus one-time recorded authorization.
+- Strict and competition modes block out-of-scope actions. Autonomous mode records a high-risk warning and continues; isolation, protected paths, budgets, and audit remain mandatory.
+- Run `/sec-doctor` before the demonstration and inspect the same diagnostic snapshot in the Web security workspace.
 - Use `security_autonomous` with `step` for one state transition or `run` for a bounded continuous search loop.
 - Use `security_benchmark catalog` to inspect the five controlled benchmark families and `security_benchmark controlled` with a scenario to evaluate the current trace.
 
@@ -26,7 +28,7 @@ Candidate Generator
   -> termination / next step
 ```
 
-The autonomous loop does not grant new privileges. It reuses the same scope, policy, sandbox, tool-registry, adapter, audit, evidence, and budget boundaries as manually selected security actions. Successful deterministic actions are not repeated, and repeated failures are tracked at capability-family level so tool substitution does not hide strategy stagnation.
+The autonomous loop does not disable sandbox, protected paths, tool-registry, adapter, audit, evidence, or budget boundaries. After its isolation and one-time authorization prerequisites are recorded, an out-of-scope action is allowed only as an explicit high-risk audit warning. Successful deterministic actions are not repeated, and repeated failures are tracked at capability-family level so tool substitution does not hide strategy stagnation.
 
 ## Controlled scenario matrix
 
@@ -44,7 +46,7 @@ These are controlled project benchmarks, not official organizer scores. Determin
 
 ## Deployment diagnostics
 
-Before a demonstration, verify model/gateway connectivity, writable workspace/report directory, required CLI versions, MCP discovery, specialist agents, sandbox status, trace output, tool-adapter availability, and benchmark configuration. Provider URL, model ID, API key, and organizer gateway remain environment/settings inputs and are never hard-coded.
+Before a demonstration, run `/sec-doctor` or the Profile `run_diagnostics` command to verify writable workspace/temp/report directories, required CLI versions, MCP/runtime-package discovery, specialist agents, sandbox status, and tool-adapter availability. Model connectivity remains an explicit unprobed warning because diagnostics do not send billable requests. Provider URL, model ID, API key, and organizer gateway remain environment/settings inputs and are never hard-coded.
 
 A recommended demo sequence is:
 

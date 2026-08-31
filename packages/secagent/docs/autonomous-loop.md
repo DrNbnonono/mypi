@@ -20,7 +20,7 @@ SecurityState
   -> next state-space step
 ```
 
-`security_autonomous` exposes `step`, `run`, and `inspect`. `run` is bounded to at most 50 steps and defaults to eight. The loop refuses to start without a task, refuses to create a second unresolved decision, and never widens authorization scope.
+`security_autonomous` exposes `step`, `run`, and `inspect`. `run` is bounded to at most 50 steps and defaults to eight. The loop refuses to start without a task or to create a second unresolved decision. Strict and competition modes block targets outside explicit scope. Autonomous mode may continue outside scope only after controlled isolation and one-time authorization, with a high-risk warning attached to the audit record.
 
 ## Deterministic execution inputs
 

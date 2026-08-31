@@ -1,5 +1,3 @@
-"use strict";
-
 const MIN_NODE_VERSION = "22.19.0";
 
 function parseNodeVersion(version) {
@@ -28,7 +26,7 @@ function getUnsupportedNodeVersionMessage(version) {
   ].join("\n");
 }
 
-module.exports = {
+export {
   MIN_NODE_VERSION,
   getUnsupportedNodeVersionMessage,
   isNodeVersionSupported,

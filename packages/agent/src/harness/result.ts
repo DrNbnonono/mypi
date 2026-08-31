@@ -1,5 +1,7 @@
 export type Result<TValue, TError> = { ok: true; value: TValue } | { ok: false; error: TError };
 
+// 统一 Result<T,E> 包装(TaggedError 机制)
+
 export const Result = {
 	ok<TValue>(value: TValue): Result<TValue, never> {
 		return { ok: true, value };

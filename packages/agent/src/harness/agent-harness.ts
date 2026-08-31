@@ -1,3 +1,4 @@
+//  AgentHarness 类 + 13 个 TaggedError 错误边界 + OperationError
 import type {
 	Api,
 	AssistantMessage,
@@ -139,6 +140,7 @@ export interface NavigateOptions {
 	label?: string;
 }
 
+// 暂停选项
 export interface SuspendedOperation {
 	lane: string;
 	kind: "run" | "compaction" | "navigation";
@@ -151,6 +153,7 @@ export interface SuspendedOperation {
 	missing: { tools: string[]; models: string[] };
 }
 
+// lane 可以理解为一条会话分支上的单写者执行通道。Session 保存历史，Harness 驱动当前操作，reducer 从 durable records 推导当前有效状态
 export interface LaneInfo {
 	name: string;
 	leafId: string | null;
@@ -241,7 +244,7 @@ export type Resources = AgentHarnessResources<Skill, PromptTemplate>;
 export type StreamOptions = SimpleStreamOptions;
 export type StreamOptionsPatch = Partial<SimpleStreamOptions>;
 export type EntryProjector = (entry: Entry) => AgentMessage[] | Promise<AgentMessage[]>;
-
+// AgentHarness 类 + 13 个 TaggedError 错误边界 + OperationError
 export interface AgentHarnessOptions {
 	session: Session;
 	models: Models;
@@ -270,6 +273,7 @@ export interface WatchHandle<TSnapshot> {
 	unsubscribe(): void;
 }
 
+// AgentLane 接口：描述目标中的完整能力
 export interface AgentLane {
 	readonly name: string;
 	getLeafId(): Promise<string | null>;
@@ -304,6 +308,7 @@ export interface AgentLane {
 	watch(): Promise<WatchHandle<LaneSnapshot>>;
 }
 
+// AgentHarness 类：实现 AgentLane 接口，提供完整的 lane 能力
 export class AgentHarness implements AgentLane {
 	// AgentHarness 的公共接口已经描述了完整的 lane 能力，但当前文件中的实现
 	// 主要先完成状态、配置和 session 连接；阅读行为时要区分“类型已声明”和“代码已驱动”。

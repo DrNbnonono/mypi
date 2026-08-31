@@ -3,7 +3,8 @@ import type { PolicyMode, RiskAssessment, RiskLevel, SecurityState } from "./typ
 
 const P3_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
 	{
-		pattern: /\brm\s+(?:(?:-[^\s]*r[^\s]*f[^\s]*|-[^\s]*f[^\s]*r[^\s]*)|(?:-[^\s]*r[^\s]*\s+-[^\s]*f[^\s]*|-[^\s]*f[^\s]*\s+-[^\s]*r[^\s]*)|--recursive)\b/i,
+		pattern:
+			/\brm\s+(?:(?:-[^\s]*r[^\s]*f[^\s]*|-[^\s]*f[^\s]*r[^\s]*)|(?:-[^\s]*r[^\s]*\s+-[^\s]*f[^\s]*|-[^\s]*f[^\s]*\s+-[^\s]*r[^\s]*)|--recursive)\b/i,
 		reason: "recursive destructive file deletion",
 	},
 	{ pattern: /\b(?:mkfs|wipefs)\b/i, reason: "filesystem destruction" },
@@ -44,5 +45,8 @@ export function canEnableAutonomous(state: SecurityState): { allowed: boolean; r
 		};
 	if (!state.autonomousAuthorization)
 		return { allowed: false, reason: "autonomous mode requires a recorded one-time risk authorization" };
+	if (!state.isolation.source || state.autonomousAuthorization.isolationSource !== state.isolation.source) {
+		return { allowed: false, reason: "autonomous authorization does not match the active isolation source" };
+	}
 	return { allowed: true };
 }

@@ -17,10 +17,12 @@ export type HarnessEventType = HarnessEvent["type"];
 export type HarnessEventOfType<TType extends HarnessEventType> = Extract<HarnessEvent, { type: TType }>;
 export type HarnessEventListener<TEvent extends HarnessEvent = HarnessEvent> = (event: TEvent) => void | Promise<void>;
 
+// 事件类型
 export interface Events {
 	/**
 	 * Register a passive listener for future events and return its unsubscribe function.
 	 * Earlier events are not replayed and no current-state snapshot is provided; use a lane or session watch for both.
+	 * 登记一个被动的事件监听器，返回取消订阅函数。不会重放早期事件，也不会提供当前状态快照；使用 lane 或 session watch 来获取两者。
 	 */
 	on<TType extends HarnessEventType>(
 		type: TType,
@@ -28,12 +30,14 @@ export interface Events {
 	): () => void;
 }
 
+// 事件总线
 export interface WatchHandle<TSnapshot> {
 	snapshot: TSnapshot;
 	start(listener: HarnessEventListener): void;
 	unsubscribe(): void;
 }
 
+// harness 事件总线实现
 export class HarnessEventBus implements Events {
 	private readonly listeners = new Map<HarnessEventType, Set<HarnessEventListener>>();
 	private readonly watchListeners = new Set<(event: HarnessEvent) => void>();
@@ -41,6 +45,7 @@ export class HarnessEventBus implements Events {
 	/**
 	 * Register a listener for future events of one type and return its unsubscribe function.
 	 * Earlier events are not replayed, and no snapshot or event buffer is provided.
+	 * 注册一个监听器，用于未来的某一类型事件，并返回其取消订阅函数。不会重放早期事件，也不会提供快照或事件缓冲区。
 	 */
 	on<TType extends HarnessEventType>(
 		type: TType,
@@ -63,6 +68,7 @@ export class HarnessEventBus implements Events {
 	}
 
 	/** Publish an event to current event subscriptions and watch subscriptions. */
+	// 将事件发布到当前事件订阅和观察订阅。
 	emit(event: HarnessEvent): void {
 		// Deliver only to direct listeners registered for this event type.
 		// Async results are not awaited because emit() is synchronous.

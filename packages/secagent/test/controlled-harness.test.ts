@@ -20,7 +20,9 @@ describe("controlled autonomous scenario harness", () => {
 		expect(result.metrics.failedDecisions).toBeGreaterThan(0);
 		expect(result.metrics.replans).toBeGreaterThan(0);
 		expect(new Set(result.trace.map((entry) => entry.capability)).size).toBeGreaterThan(1);
-		expect(result.evaluation.properties.find((item) => item.property === "failure-triggers-replan")?.passed).toBe(true);
+		expect(result.evaluation.properties.find((item) => item.property === "failure-triggers-replan")?.passed).toBe(
+			true,
+		);
 		expect(result.evaluation.passed, JSON.stringify(result.evaluation, null, 2)).toBe(true);
 	});
 
@@ -28,6 +30,8 @@ describe("controlled autonomous scenario harness", () => {
 		const result = await runControlledScenarioBenchmark("pwn");
 		const allowed = new Set(["file", "strings", "readelf", "objdump", "binwalk", "exiftool"]);
 		expect(result.trace.every((entry) => allowed.has(entry.tool))).toBe(true);
-		expect(result.evaluation.properties.find((item) => item.property === "pwn-capability-profiled")?.passed).toBe(true);
+		expect(result.evaluation.properties.find((item) => item.property === "pwn-capability-profiled")?.passed).toBe(
+			true,
+		);
 	});
 });

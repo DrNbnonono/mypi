@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
 import test from "node:test";
+import { parseLaunchOptions } from "../bin/pi-web-options.js";
 
-const require = createRequire(import.meta.url);
-const { parseLaunchOptions } = require("../bin/pi-web-options.js");
 
 test("opens the browser by default", () => {
   assert.deepEqual(parseLaunchOptions([], {}), {

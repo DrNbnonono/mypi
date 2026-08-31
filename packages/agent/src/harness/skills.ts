@@ -2,6 +2,8 @@ import ignore from "ignore";
 import { parse } from "yaml";
 import { type ExecutionEnv, type FileInfo, type Result, type Skill, toError } from "./types.ts";
 
+// skills 加载与注入
+
 const MAX_NAME_LENGTH = 64;
 const MAX_DESCRIPTION_LENGTH = 1024;
 const IGNORE_FILE_NAMES = [".gitignore", ".ignore", ".fdignore"];
@@ -16,6 +18,7 @@ export type SkillDiagnosticCode =
 	| "invalid_metadata";
 
 /** Warning produced while loading skills. */
+// 警告信息
 export interface SkillDiagnostic {
 	/** Diagnostic severity. Currently only warnings are emitted. */
 	type: "warning";
@@ -101,6 +104,7 @@ export async function loadSourcedSkills<TSource, TSkill extends Skill = Skill>(
 	return { skills, diagnostics };
 }
 
+// 从目录中加载skills
 async function loadSkillsFromDirInternal(
 	env: ExecutionEnv,
 	dir: string,
@@ -175,6 +179,7 @@ async function loadSkillsFromDirInternal(
 	return { skills, diagnostics };
 }
 
+// 添加忽略规则
 async function addIgnoreRules(
 	env: ExecutionEnv,
 	ig: IgnoreMatcher,
@@ -223,6 +228,7 @@ async function addIgnoreRules(
 	}
 }
 
+// 在忽略模式前添加前缀
 function prefixIgnorePattern(line: string, prefix: string): string | null {
 	const trimmed = line.trim();
 	if (!trimmed) return null;
@@ -241,6 +247,7 @@ function prefixIgnorePattern(line: string, prefix: string): string | null {
 	return negated ? `!${prefixed}` : prefixed;
 }
 
+// 从文件中加载skill
 async function loadSkillFromFile(
 	env: ExecutionEnv,
 	filePath: string,
@@ -298,6 +305,7 @@ async function loadSkillFromFile(
 	};
 }
 
+// 验证名称
 function validateName(name: string, parentDirName: string): string[] {
 	const errors: string[] = [];
 	if (name !== parentDirName) errors.push(`name "${name}" does not match parent directory "${parentDirName}"`);
@@ -310,6 +318,7 @@ function validateName(name: string, parentDirName: string): string[] {
 	return errors;
 }
 
+// 验证描述
 function validateDescription(description: string | undefined): string[] {
 	const errors: string[] = [];
 	if (!description || description.trim() === "") {
@@ -320,6 +329,7 @@ function validateDescription(description: string | undefined): string[] {
 	return errors;
 }
 
+// 解析frontmatter
 function parseFrontmatter<T extends Record<string, unknown>>(
 	content: string,
 ): Result<{ frontmatter: T; body: string }, Error> {
@@ -336,6 +346,7 @@ function parseFrontmatter<T extends Record<string, unknown>>(
 	}
 }
 
+// 重新加载
 async function resolveKind(
 	env: ExecutionEnv,
 	info: FileInfo,
@@ -369,6 +380,7 @@ async function resolveKind(
 	return target.value.kind === "file" || target.value.kind === "directory" ? target.value.kind : undefined;
 }
 
+// 获取环境路径的目录名
 function dirnameEnvPath(path: string): string {
 	const normalized = path.replace(/[\\/]+$/, "");
 	const separatorIndex = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));

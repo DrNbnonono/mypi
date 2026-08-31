@@ -24,8 +24,7 @@ function validateHttpTarget(target: string | undefined, requireFuzz = false): st
 	} catch {
 		throw new Error("target must be an absolute HTTP or HTTPS URL");
 	}
-	if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-		throw new Error("target must use http or https");
+	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("target must use http or https");
 	if (requireFuzz && !target.includes("FUZZ")) throw new Error("ffuf target must contain the FUZZ marker");
 	return target;
 }
@@ -58,10 +57,15 @@ function httpxArgs(input: Record<string, unknown>, target: string): string[] {
 	return args;
 }
 
-async function ffufArgs(input: Record<string, unknown>, context: SecurityToolExecutionContext, target: string): Promise<string[]> {
+async function ffufArgs(
+	input: Record<string, unknown>,
+	context: SecurityToolExecutionContext,
+	target: string,
+): Promise<string[]> {
 	const wordlist = stringInput(input, "wordlist");
 	const checked = await checkLocalInput(wordlist, context);
-	if (checked.diagnostic || !checked.path) throw new Error(checked.diagnostic?.message ?? "ffuf requires a wordlist inside the session cwd");
+	if (checked.diagnostic || !checked.path)
+		throw new Error(checked.diagnostic?.message ?? "ffuf requires a wordlist inside the session cwd");
 	const threads = boundedInteger(input.threads, 20, 1, 50, "threads");
 	const rate = boundedInteger(input.rate, 50, 1, 200, "rate");
 	return ["-u", target, "-w", checked.path, "-json", "-noninteractive", "-t", String(threads), "-rate", String(rate)];
@@ -74,14 +78,19 @@ function nucleiArgs(input: Record<string, unknown>, target: string): string[] {
 		: [];
 	if (severities.some((severity) => !NUCLEI_SEVERITIES.has(severity))) throw new Error("unsupported nuclei severity");
 	const tags = Array.isArray(input.tags) ? input.tags.filter((item): item is string => typeof item === "string") : [];
-	if (tags.length > 16 || tags.some((tag) => !/^[A-Za-z0-9_-]{1,64}$/.test(tag))) throw new Error("nuclei tags must be simple names and are limited to 16 entries");
+	if (tags.length > 16 || tags.some((tag) => !/^[A-Za-z0-9_-]{1,64}$/.test(tag)))
+		throw new Error("nuclei tags must be simple names and are limited to 16 entries");
 	const args = [
-		"-u", target,
+		"-u",
+		target,
 		"-silent",
 		"-jsonl",
-		"-rate-limit", String(rate),
-		"-bulk-size", "10",
-		"-concurrency", "10",
+		"-rate-limit",
+		String(rate),
+		"-bulk-size",
+		"10",
+		"-concurrency",
+		"10",
 		"-no-interactsh",
 		"-disable-unsigned-templates",
 	];
@@ -100,11 +109,20 @@ function normalizeWeb(command: WebToolName, output: Record<string, unknown>): Re
 		...output,
 		results: parsed,
 		resultCount: parsed.length,
-		mode: command === "nuclei" ? "signed-builtin-templates" : command === "ffuf" ? "bounded-content-discovery" : "http-fingerprint",
+		mode:
+			command === "nuclei"
+				? "signed-builtin-templates"
+				: command === "ffuf"
+					? "bounded-content-discovery"
+					: "http-fingerprint",
 	};
 }
 
-async function validateInput(command: WebToolName, input: Record<string, unknown>, context: SecurityToolExecutionContext): Promise<string[]> {
+async function validateInput(
+	command: WebToolName,
+	input: Record<string, unknown>,
+	context: SecurityToolExecutionContext,
+): Promise<string[]> {
 	try {
 		const target = validateHttpTarget(webTarget(input), command === "ffuf");
 		if (command === "ffuf") await ffufArgs(input, context, target);
@@ -126,11 +144,12 @@ async function executeWeb(
 	let args: string[];
 	try {
 		target = validateHttpTarget(webTarget(input), command === "ffuf");
-		args = command === "ffuf"
-			? await ffufArgs(input, context, target)
-			: command === "nuclei"
-				? nucleiArgs(input, target)
-				: httpxArgs(input, target);
+		args =
+			command === "ffuf"
+				? await ffufArgs(input, context, target)
+				: command === "nuclei"
+					? nucleiArgs(input, target)
+					: httpxArgs(input, target);
 	} catch (error) {
 		return preconditionResult(error instanceof Error ? error.message : String(error));
 	}

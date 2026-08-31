@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { getRpcSession, startRpcSession } from "@/lib/rpc-manager";
 import { resolveSessionPath } from "@/lib/session-reader";
 
+const PROFILE_COMMAND_TYPES = new Set([
+	"set_scope", "set_isolation", "authorize_autonomous", "set_policy", "append_event", "run_diagnostics", "build_report",
+]);
+
 async function resolveProfileSession(id: string) {
 	const existing = getRpcSession(id);
 	if (existing?.isAlive()) return existing;
@@ -24,7 +28,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
 	try {
 		const { id } = await params;
-		const command = await req.json() as Record<string, unknown>;
+		const command = await req.json() as unknown;
+		if (!command || typeof command !== "object" || !("type" in command)
+			|| typeof command.type !== "string" || !PROFILE_COMMAND_TYPES.has(command.type)) {
+			return NextResponse.json({ error: "Unsupported profile command" }, { status: 400 });
+		}
 		const session = await resolveProfileSession(id);
 		if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 		const data = await session.send({ type: "profile_command", command });

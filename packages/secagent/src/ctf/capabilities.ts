@@ -87,7 +87,9 @@ const KIND_KEYWORDS: Readonly<Record<Exclude<CtfChallengeKind, "unknown">, reado
 
 export function inferCtfChallengeKind(text: string): CtfChallengeKind {
 	let best: { kind: CtfChallengeKind; score: number } = { kind: "unknown", score: 0 };
-	for (const [kind, patterns] of Object.entries(KIND_KEYWORDS) as Array<[Exclude<CtfChallengeKind, "unknown">, readonly RegExp[]]>) {
+	for (const [kind, patterns] of Object.entries(KIND_KEYWORDS) as Array<
+		[Exclude<CtfChallengeKind, "unknown">, readonly RegExp[]]
+	>) {
 		const score = patterns.reduce((sum, pattern) => sum + (pattern.test(text) ? 1 : 0), 0);
 		if (score > best.score) best = { kind, score };
 	}
@@ -95,11 +97,23 @@ export function inferCtfChallengeKind(text: string): CtfChallengeKind {
 }
 
 export function capabilitiesForCtf(kind: CtfChallengeKind): CtfCapability[] {
-	return CTF_CAPABILITIES.filter((capability) => capability.challengeKinds.includes(kind) || capability.challengeKinds.includes("unknown"));
+	return CTF_CAPABILITIES.filter(
+		(capability) => capability.challengeKinds.includes(kind) || capability.challengeKinds.includes("unknown"),
+	);
 }
 
-export function createCtfChallengeProfile(state: SecurityState, overrideKind?: CtfChallengeKind, description?: string): CtfChallengeProfile {
-	const corpus = [state.goal, state.task?.goal, description, ...(state.task?.constraints ?? []), ...(state.task?.successCriteria ?? [])]
+export function createCtfChallengeProfile(
+	state: SecurityState,
+	overrideKind?: CtfChallengeKind,
+	description?: string,
+): CtfChallengeProfile {
+	const corpus = [
+		state.goal,
+		state.task?.goal,
+		description,
+		...(state.task?.constraints ?? []),
+		...(state.task?.successCriteria ?? []),
+	]
 		.filter((item): item is string => Boolean(item))
 		.join("\n");
 	const kind = overrideKind ?? inferCtfChallengeKind(corpus);

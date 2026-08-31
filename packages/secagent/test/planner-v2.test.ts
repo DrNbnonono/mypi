@@ -11,10 +11,21 @@ function failedDecision(id: string, tool: string, capability?: string): Security
 		goal: "fixture",
 		stage: "analysis",
 		evidenceIds: [],
-		candidates: [{
-			id: `${id}-action`, tool, capability, description: tool, goalRelevance: 1, informationGain: 0.8, confidence: 0.8,
-			cost: 0.2, preconditions: [], risk: 0.2, score: 0.7,
-		}],
+		candidates: [
+			{
+				id: `${id}-action`,
+				tool,
+				capability,
+				description: tool,
+				goalRelevance: 1,
+				informationGain: 0.8,
+				confidence: 0.8,
+				cost: 0.2,
+				preconditions: [],
+				risk: 0.2,
+				score: 0.7,
+			},
+		],
 		selectedActionId: `${id}-action`,
 		resultStatus: "failed",
 		actualResult: "fixture failure",
@@ -26,8 +37,26 @@ describe("competition planner/replanner", () => {
 		const state = createInitialSecurityState();
 		state.decisions.push(failedDecision("d1", "curl"), failedDecision("d2", "curl"));
 		const candidates: CandidateActionInput[] = [
-			{ id: "repeat", tool: "curl", description: "repeat", goalRelevance: 0.9, informationGain: 0.8, confidence: 0.8, cost: 0.2, preconditions: [] },
-			{ id: "novel", tool: "nmap", description: "novel", goalRelevance: 0.9, informationGain: 0.8, confidence: 0.8, cost: 0.2, preconditions: [] },
+			{
+				id: "repeat",
+				tool: "curl",
+				description: "repeat",
+				goalRelevance: 0.9,
+				informationGain: 0.8,
+				confidence: 0.8,
+				cost: 0.2,
+				preconditions: [],
+			},
+			{
+				id: "novel",
+				tool: "nmap",
+				description: "novel",
+				goalRelevance: 0.9,
+				informationGain: 0.8,
+				confidence: 0.8,
+				cost: 0.2,
+				preconditions: [],
+			},
 		];
 		const ranked = rankCandidates(candidates, { state });
 		expect(ranked.find((item) => item.id === "repeat")?.noveltyPenalty).toBeGreaterThan(0);
@@ -41,8 +70,28 @@ describe("competition planner/replanner", () => {
 			failedDecision("d2", "ffuf", "web-enumeration"),
 		);
 		const candidates: CandidateActionInput[] = [
-			{ id: "same-family", tool: "nmap", capability: "web-enumeration", description: "same family", goalRelevance: 1, informationGain: 1, confidence: 1, cost: 0.1, preconditions: [] },
-			{ id: "different-family", tool: "curl", capability: "web-request-analysis", description: "different family", goalRelevance: 0.7, informationGain: 0.7, confidence: 0.7, cost: 0.1, preconditions: [] },
+			{
+				id: "same-family",
+				tool: "nmap",
+				capability: "web-enumeration",
+				description: "same family",
+				goalRelevance: 1,
+				informationGain: 1,
+				confidence: 1,
+				cost: 0.1,
+				preconditions: [],
+			},
+			{
+				id: "different-family",
+				tool: "curl",
+				capability: "web-request-analysis",
+				description: "different family",
+				goalRelevance: 0.7,
+				informationGain: 0.7,
+				confidence: 0.7,
+				cost: 0.1,
+				preconditions: [],
+			},
 		];
 		expect(rankCandidates(candidates, { state })[0]?.id).toBe("different-family");
 		expect(assessReplanNeed(state)).toMatchObject({ required: true, trigger: "repeated-failure" });

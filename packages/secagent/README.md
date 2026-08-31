@@ -9,6 +9,8 @@ SecAgent reuses `AgentSession`, extensions, resource loading, and mature Pi runt
 - `pi-subagents@0.50.0` — bounded specialist child sessions;
 - `pi-trace-extension@0.1.14` — generic execution tracing.
 
+These packages are resolved only from the controlled deployment's local Node installation. SecAgent never installs them during Session startup. A missing package is omitted and reported by `/sec-doctor`; install the exact versions above with lifecycle scripts disabled when preparing the competition image.
+
 `packages/secagent` is the canonical source for the security kernel, profile extensions, specialist agents, integrations, reports, templates, benchmarks, and tests. Project `.pi` files are deployment/configuration overrides only; SecAgent implementation must not be duplicated there.
 
 ## Autonomous decision loop
@@ -28,7 +30,9 @@ SecurityState
   -> next SecurityState
 ```
 
-The model can propose hypotheses and goals, but it cannot use the autonomous loop to invent arbitrary command lines, widen scope, bypass policy, or directly promote scanner output into a confirmed finding.
+The model can propose hypotheses and goals, but it cannot use the autonomous loop to invent arbitrary command lines, bypass isolation/audit/protected paths, or directly promote scanner output into a confirmed finding. Strict and competition modes block out-of-scope targets. Autonomous mode may continue only after controlled isolation and one-time authorization, and every out-of-scope action is retained as a high-risk audit warning.
+
+Run `/sec-doctor` in the CLI or send `{ "type": "run_diagnostics" }` to the Profile command API to inspect isolation, Sec-only runtime packages, specialist definitions, external tool versions, and writable workspace/temp/report directories. Model connectivity is not actively probed because a diagnostic must not create a billable provider request.
 
 ## Competition benchmarks
 
