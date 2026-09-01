@@ -22,6 +22,7 @@ export interface SessionContextBuildOptions {
 	entryProjectors?: Readonly<Record<string, CustomEntryContextMessageProjector>>;
 }
 
+// 派生session上下文状态
 function deriveSessionContextState(pathEntries: readonly Entry[]): Omit<SessionContext, "messages"> {
 	let thinkingLevel = "off";
 	let model: { provider: string; modelId: string } | null = null;
@@ -42,6 +43,7 @@ function deriveSessionContextState(pathEntries: readonly Entry[]): Omit<SessionC
 	return { thinkingLevel, model, activeToolNames };
 }
 
+// 默认的上下文entry转换器：保留最后一个compaction entry及其之后的所有entry
 export function defaultContextEntryTransform(pathEntries: readonly Entry[]): Entry[] {
 	let compaction: CompactionEntry | undefined;
 	let compactionIndex = -1;
@@ -62,6 +64,7 @@ export function buildContextEntries(pathEntries: readonly Entry[], options: Sess
 	return entries;
 }
 
+// 将session的entry转换为上下文消息
 export function sessionEntryToContextMessages(
 	entry: Entry,
 	index: number,
@@ -87,6 +90,7 @@ export function sessionEntryToContextMessages(
 	return [];
 }
 
+// 构建session的上下文
 export function buildSessionContext(
 	pathEntries: readonly Entry[],
 	options: SessionContextBuildOptions = {},

@@ -22,6 +22,7 @@ import {
 	type SessionStorage,
 } from "./types.ts";
 
+// 记忆存储：在内存中存储会话数据
 export class InMemorySessionStorage implements SessionStorage {
 	private readonly metadata: SessionMetadata;
 	private readonly state = new SessionState();

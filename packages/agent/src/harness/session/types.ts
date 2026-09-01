@@ -287,6 +287,8 @@ export interface LogOptions {
 	limit?: number;
 }
 
+// SessionStorage 接口：描述目标中的完整能力
+// 定义底层存储的操作接口，提供对会话数据的持久化和查询能力。
 export interface SessionStorage<TMetadata extends SessionMetadata = SessionMetadata> {
 	getMetadata(): Promise<TMetadata>;
 
@@ -325,6 +327,8 @@ export interface SessionStorage<TMetadata extends SessionMetadata = SessionMetad
 	getStats(): Promise<SessionStats>;
 }
 
+// SessionTree 接口：描述目标中的完整能力
+// 定义会话树的操作接口，提供对会话数据的读取和写入能力。
 export interface SessionTree {
 	getLeafId(): Promise<string | null>;
 	getEntry(id: string): Promise<Entry | undefined>;
@@ -356,6 +360,8 @@ export interface SessionCreateOptions {
 	parentSessionId?: string;
 }
 
+// ForkOptions 接口：描述目标中的完整能力
+// 定义会话分叉的操作接口，提供对会话数据的分叉能力。
 export type ForkOptions = { scope?: "branch"; entryId?: string; position?: "before" | "at" } | { scope: "tree" };
 
 export interface SessionRepo<
@@ -372,6 +378,8 @@ export interface SessionRepo<
 	fork(source: TMetadata, options: ForkOptions & TCreateOptions): Promise<Session<TMetadata>>;
 }
 
+// SessionError 类：描述目标中的完整能力
+// 定义会话错误的操作接口，提供对会话数据的错误处理能力。
 export type SessionErrorCode =
 	| "not_found"
 	| "already_exists"

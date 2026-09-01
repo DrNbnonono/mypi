@@ -39,6 +39,7 @@ function createAssistantMessage(text: string): AgentMessage {
 	};
 }
 
+// 创建一个操作开始记录
 function operationStarted(
 	id: string,
 	{ lane, kind }: { lane: string; kind: OperationStartedRecord["intent"]["kind"] },

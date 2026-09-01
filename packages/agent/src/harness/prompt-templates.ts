@@ -69,11 +69,11 @@ export async function loadPromptTemplates(
  *
  * Source values are preserved exactly and attached to every loaded prompt template and diagnostic. The agent package does
  * not interpret source values; applications define their own provenance shape.
- * 
+ *
  * 从源标记路径加载prompt模板。
  * 源值被精确保留，并附加到每个加载的prompt模板和诊断中。代理包不解释源值；应用程序定义自己的来源形状。
- * 
-*/
+ *
+ */
 export async function loadSourcedPromptTemplates<TSource, TPromptTemplate extends PromptTemplate = PromptTemplate>(
 	env: ExecutionEnv,
 	inputs: Array<{ path: string; source: TSource }>,

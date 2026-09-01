@@ -234,7 +234,7 @@ const operationErrorAttributes = {
 	},
 } as const;
 
-// harness当前的临时缓存 
+// harness当前的临时缓存
 export const HARNESS_TELEMETRY_SCHEMA = {
 	version: 1,
 	spans: {

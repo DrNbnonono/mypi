@@ -118,6 +118,7 @@ export class Session<TMetadata extends SessionMetadata = SessionMetadata> implem
 		return this.storage.getMetadata();
 	}
 
+	// 返回分支视图，允许在同一会话树上并行操作不同的分支。
 	view(lane: string): SessionTree {
 		if (lane === "main") return this;
 		return {
@@ -137,38 +138,47 @@ export class Session<TMetadata extends SessionMetadata = SessionMetadata> implem
 		};
 	}
 
+	// 返回主分支的当前叶子 ID，或 null 表示会话树为空。
 	async getLeafId(): Promise<string | null> {
 		return this.getLeafIdForLane("main");
 	}
 
+	// 返回指定 ID 的入口，或 undefined 表示未找到。
 	async getEntry(id: string): Promise<Entry | undefined> {
 		return this.storage.getEntry(id);
 	}
 
+	// 返回会话树的统计信息，包括消息数、令牌数和成本。
 	async getStats(): Promise<SessionStats> {
 		return this.storage.getStats();
 	}
 
+	// 返回会话树的名称，或 undefined 表示未设置。
 	async getName(): Promise<string | undefined> {
 		return this.storage.getName();
 	}
 
+	// 设置会话树的名称，或 undefined 表示清除名称。
 	async setName(name: string | undefined): Promise<void> {
 		await this.storage.setName(name);
 	}
 
+	// 返回指定目标 ID 的标签，或 undefined 表示未设置。
 	async getLabel(targetId: string): Promise<string | undefined> {
 		return this.storage.getLabel(targetId);
 	}
 
+	// 设置指定目标 ID 的标签，或 undefined 表示清除标签。
 	async setLabel(targetId: string, label: string | undefined): Promise<void> {
 		await this.storage.setLabel(targetId, label);
 	}
 
+	// 返回指定查询的入口列表，按序号升序排列。
 	async findEntries(query?: EntryQuery): Promise<Entry[]> {
 		return this.queryEntries(query);
 	}
 
+	//
 	async findEntry(query: EntryQuery = {}): Promise<Entry | undefined> {
 		return (await this.queryEntries(query, 1))[0];
 	}

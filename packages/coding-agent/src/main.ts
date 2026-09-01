@@ -3,6 +3,7 @@
  *
  * This file handles CLI argument parsing and translates them into
  * createAgentSession() options. The SDK does the heavy lifting.
+ * 主文件，通过普通的 CLI 入口启动，解析 CLI 参数并将其转换为 createAgentSession() 选项。SDK 处理主要逻辑。
  */
 
 import { createInterface } from "node:readline";
@@ -74,6 +75,7 @@ const EXTENSION_LOAD_FAILURE_HINT = `Hint: Start without extensions using "${APP
 /**
  * Read all content from piped stdin.
  * Returns undefined if stdin is a TTY (interactive terminal).
+ * 读取所有的输入文本，返回 undefined 如果 stdin 是 TTY（交互式终端）。
  */
 async function readPipedStdin(): Promise<string | undefined> {
 	// If stdin is a TTY, we're running interactively - don't read stdin
@@ -94,6 +96,7 @@ async function readPipedStdin(): Promise<string | undefined> {
 	});
 }
 
+// 报告错误类型
 function reportDiagnostics(diagnostics: readonly AgentSessionRuntimeDiagnostic[]): void {
 	for (const diagnostic of diagnostics) {
 		const color = diagnostic.type === "error" ? chalk.red : diagnostic.type === "warning" ? chalk.yellow : chalk.dim;
@@ -102,11 +105,13 @@ function reportDiagnostics(diagnostics: readonly AgentSessionRuntimeDiagnostic[]
 	}
 }
 
+// 检查环境变量是否为真值
 function isTruthyEnvFlag(value: string | undefined): boolean {
 	if (!value) return false;
 	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
 }
 
+// 接受文件的类型
 function resolveAppMode(parsed: Args, stdinIsTTY: boolean, stdoutIsTTY: boolean): AppMode {
 	if (parsed.mode === "rpc") {
 		return "rpc";
@@ -128,6 +133,7 @@ function isPlainRuntimeMetadataCommand(parsed: Args): boolean {
 	return !parsed.print && parsed.mode === undefined && (parsed.help === true || parsed.listModels !== undefined);
 }
 
+// 运行认证命令
 async function runAuthCommand(args: string[]): Promise<boolean> {
 	if (isAuthCommandHelp(args)) {
 		printAuthCommandHelp();
@@ -206,6 +212,7 @@ async function runAuthCommand(args: string[]): Promise<boolean> {
 	return true;
 }
 
+// 准备初始化信息
 async function prepareInitialMessage(
 	parsed: Args,
 	autoResizeImages: boolean,
@@ -228,6 +235,7 @@ async function prepareInitialMessage(
 }
 
 /** Result from resolving a session argument */
+// 解析会话参数的结果
 type ResolvedSession =
 	| { type: "path"; path: string } // Direct file path
 	| { type: "local"; path: string } // Found in current project
@@ -237,6 +245,7 @@ type ResolvedSession =
 /**
  * Resolve a session argument to a file path.
  * If it looks like a path, use as-is. Otherwise try to match as session ID prefix.
+ * 解决会话参数到文件路径。如果它看起来像一个路径，则按原样使用。否则尝试匹配为会话 ID 前缀。
  */
 async function findLocalSessionByExactId(
 	sessionId: string,
@@ -306,6 +315,7 @@ function validateForkFlags(parsed: Args): void {
 	}
 }
 
+// 检验sessionId参数是否与其他参数冲突
 function validateSessionIdFlags(parsed: Args): void {
 	if (parsed.sessionId === undefined) return;
 
@@ -349,6 +359,7 @@ function forkSessionOrExit(sourcePath: string, cwd: string, sessionDir?: string,
 	}
 }
 
+// 创建session管理
 export async function createSessionManager(
 	parsed: Args,
 	cwd: string,
@@ -442,6 +453,7 @@ export async function createSessionManager(
 	return SessionManager.create(cwd, sessionDir, { id: parsed.sessionId, agentMode: parsed.agentMode });
 }
 
+// 构建session选项
 function buildSessionOptions(
 	parsed: Args,
 	scopedModels: ScopedModel[],
@@ -544,6 +556,7 @@ function resolveCliPaths(cwd: string, paths: string[] | undefined): string[] | u
 	return paths?.map((value) => (isLocalPath(value) ? resolvePath(value, cwd) : value));
 }
 
+// 提示用户输入缺失的会话工作目录
 async function promptForMissingSessionCwd(
 	issue: SessionCwdIssue,
 	settingsManager: SettingsManager,

@@ -47,6 +47,8 @@ function* ordered<T>(items: readonly T[], order: EntryOrder | undefined): Iterab
 	for (let index = items.length - 1; index >= 0; index--) yield items[index]!;
 }
 
+// SessionState 类：描述目标中的完整能力
+// 定义会话状态的操作接口，提供对会话数据的读取和写入能力。
 export class SessionState {
 	private sequence = 0;
 	private readonly usedIds = new Set<string>();
@@ -185,6 +187,7 @@ export class SessionState {
 		return this.entriesById.get(id);
 	}
 
+	// 找到入口
 	findEntries(query: EntryQuery = {}): Entry[] {
 		assertValidLimit(query.limit);
 		assertValidCursor(query.cursor?.afterSeq);
@@ -197,6 +200,7 @@ export class SessionState {
 		return results;
 	}
 
+	// 找到分支上的入口
 	findEntriesOnBranch(query: EntryQuery & BranchBounds & { start: string }): Entry[] {
 		assertValidLimit(query.limit);
 		assertValidCursor(query.cursor?.afterSeq);
@@ -216,6 +220,7 @@ export class SessionState {
 		return results;
 	}
 
+	// 找到记录
 	findRecords(query: RecordQuery = {}): LaneRecord[] {
 		assertValidLimit(query.limit);
 		assertValidCursor(query.afterSeq);
@@ -228,6 +233,7 @@ export class SessionState {
 		return results;
 	}
 
+	// 找到打开的操作
 	findOpenOperations(lane: string, options?: { limit?: number }): OperationStartedRecord[] {
 		assertValidLimit(options?.limit);
 		const openOperationsById = this.openOperationsByLane.get(lane);
@@ -259,6 +265,7 @@ export class SessionState {
 		return this.stats;
 	}
 
+	// 创建分叉变更
 	createForkMutations(options: ForkOptions): SessionMutation[] {
 		let copiedEntries: Entry[];
 		let forkLanes: LanePointer[];
@@ -300,6 +307,7 @@ export class SessionState {
 		return mutations;
 	}
 
+	// 递归遍历分支到根
 	private *walkToRoot(
 		start: string | null,
 		bounds?: Pick<BranchBounds, "stopAtId" | "stopAtType">,
@@ -321,6 +329,7 @@ export class SessionState {
 		}
 	}
 
+	// 找到入口查询
 	private matchesEntryQuery(entry: Entry, query: EntryQuery): boolean {
 		return (
 			(query.type === undefined || entry.type === query.type) &&
@@ -330,6 +339,7 @@ export class SessionState {
 		);
 	}
 
+	// 找到记录查询
 	private matchesRecordQuery(record: LaneRecord, query: RecordQuery): boolean {
 		return (
 			(query.lane === undefined || record.lane === query.lane) &&
