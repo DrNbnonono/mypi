@@ -31,7 +31,7 @@
   "scripts": {
     "dev": "node bin/pi-web.js dev",
     "dev:lan": "node bin/pi-web.js dev -H 0.0.0.0",
-    "build": "next build --webpack",
+    "build": "node bin/prepare-production-output.js && next build --webpack",
     "start": "node bin/pi-web.js start",
     "start:lan": "node bin/pi-web.js start -H 0.0.0.0",
     "lint": "eslint .",

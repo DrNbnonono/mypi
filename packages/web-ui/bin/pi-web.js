@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getUnsupportedNodeVersionMessage, isNodeVersionSupported } from "./node-version.js";
+import { prepareDevOutputDirectory } from "./dev-output.js";
 import { parseLaunchOptions } from "./pi-web-options.js";
 import { prepareRuntime } from "./prepare-runtime.js";
 import { wireChildProcessLifecycle } from "./process-lifecycle.js";
@@ -90,7 +91,7 @@ function main(argv = process.argv.slice(2)) {
   }
 
   const command = nextCommands.has(argv[0]) || argv[0] === "test" ? argv.shift() : "start";
-  const env = getWebProcessEnvironment(process.env, { tmpdir: os.tmpdir() });
+  const env = getWebProcessEnvironment(process.env, { tmpdir: os.tmpdir(), command, cwd: packageDir });
 
   if (command === "test") {
     launchTests(argv, env);
@@ -104,6 +105,7 @@ function main(argv = process.argv.slice(2)) {
     process.exitCode = 1;
     return;
   }
+  if (command === "dev") prepareDevOutputDirectory(packageDir, env);
 
   if (command === "start" && !existsSync(path.join(packageDir, ".next"))) {
     console.error("Build artifacts not found. Run npm run build in packages/web-ui first.");

@@ -12,6 +12,30 @@
 - Use `security_autonomous` with `step` for one state transition or `run` for a bounded continuous search loop.
 - Use `security_benchmark catalog` to inspect the five controlled benchmark families and `security_benchmark controlled` with a scenario to evaluate the current trace.
 
+Prepare a local or competition image with Node.js `22.19.0` or newer and the four pinned Sec runtime packages:
+
+```bash
+npm install --ignore-scripts --no-save \
+  pi-sandbox@0.6.3 \
+  pi-mcp-adapter@2.23.0 \
+  pi-subagents@0.50.0 \
+  pi-trace-extension@0.1.14
+```
+
+The packages are installed by the container template for the competition image. They are resolved only when a Sec profile is created; Coding Sessions do not depend on them. With `--no-save`, npm may label these packages `extraneous`, which is expected for this local deployment. Missing or mismatched packages produce diagnostics and do not enable autonomous mode.
+
+For WSL development, place the repository and `node_modules` on Linux ext4, such as `~/src/mypi`. `/mnt/*` is a Windows-mounted filesystem and is slow for the small-file workload of npm, TypeScript, Next.js, and Webpack. When development runs from `/mnt/*`, the launcher uses `/tmp` for `.next` and the development Webpack cache, but the source and dependency tree remain on the mounted filesystem.
+
+Use `next dev` only while changing the UI. For a stable competition demonstration or long-running autonomous Session, use a production build and a process supervisor:
+
+```bash
+npm run build
+npm run build --workspace=@agegr/pi-web
+npm run start --workspace=@agegr/pi-web
+```
+
+The Web UI and Sec workspace controls support English and Simplified Chinese. Model, finding, diagnostic, and tool output remains in the language returned by the runtime. Running-state updates use SSE with fallback polling; after an operating-system or production-process restart, verify the restored Session snapshot before resuming work.
+
 ## Autonomous competition loop
 
 The implemented execution path is:

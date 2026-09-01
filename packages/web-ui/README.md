@@ -2,7 +2,7 @@
 
 [中文文档](./README.zh-CN.md) | [日本語](./README.ja.md) | [Русский](./README.ru.md)
 
-Local browser UI for the [pi coding agent](https://github.com/earendil-works/pi). Pi Web uses the same local configuration and session files as pi, so you can browse and resume conversations, run agent turns, configure models and resources, and inspect project files from a browser.
+Local browser UI for the [Pi agent harness](https://github.com/earendil-works/pi). Pi Web uses the same local configuration and Session files as `pi`, so you can browse and resume conversations, run Coding or Sec agent turns, configure models and resources, inspect project files, and view controlled security state from a browser.
 
 ![Pi Web displaying a pi session with structured Markdown, tool calls, and project navigation](https://raw.githubusercontent.com/agegr/pi-web/main/docs/screenshot2.png)
 
@@ -13,7 +13,9 @@ Local browser UI for the [pi coding agent](https://github.com/earendil-works/pi)
 - **Project file tools**: browse and upload files, inspect Git diffs, and preview source, Markdown, images, audio, PDFs, and DOCX files with automatic refresh.
 - **Git worktrees**: switch checkouts from the sidebar while keeping sessions from the same repository grouped together.
 - **Web-based configuration**: manage provider login and API keys, models, model tests, plugin packages, and skills without leaving Pi Web.
-- **English and Simplified Chinese UI**: Pi Web follows the browser language initially and provides a language switcher in the top bar.
+- **Coding/Sec profiles**: choose the default Coding profile or the opt-in SecAgent profile when creating a Session. Session mode is persisted; switching mode creates a new blank Session in the same working directory.
+- **Security workspace**: Sec Sessions expose task intake state, authorization scope, policy/isolation status, evidence, findings, decisions, tool audit, diagnostics, and Markdown/JSON report output.
+- **English and Simplified Chinese UI**: Pi Web follows the browser language initially and provides a language switcher in the top bar. Sec workspace controls and structured statuses switch with the selected language; model/tool output remains in the language returned by the runtime.
 
 ## Quick Start
 
@@ -63,6 +65,8 @@ PI_WEB_PASSWORD='a-long-random-password' pi-web --hostname 0.0.0.0
 ```
 
 Basic Auth does not encrypt the password in transit. Do not expose Pi Web over plain HTTP to the internet; use HTTPS through a trusted reverse proxy or a trusted VPN. If a reverse proxy sends an external hostname, add that exact name to `PI_WEB_ALLOWED_HOSTS`. This allow-list does not change the address Pi Web binds to.
+
+Security Sessions still require an explicit authorized scope. Attachment contents do not grant authorization. SecAgent's `autonomous` policy additionally requires controlled sandbox/container isolation or a recorded organizer-controlled isolation source and one confirmation. Do not expose a Sec Session or its credentials to an untrusted network.
 
 ### HTTP Proxy
 
@@ -125,7 +129,17 @@ npm install
 npm run dev
 ```
 
-The development server runs at [http://127.0.0.1:30141](http://127.0.0.1:30141). Run the common checks with:
+The development server runs at [http://127.0.0.1:30141](http://127.0.0.1:30141). Use it for UI changes. For a stable demonstration or long-running Coding/Sec Session, run the following from the repository root:
+
+```bash
+npm run build
+npm run build --workspace=@agegr/pi-web
+npm run start --workspace=@agegr/pi-web
+```
+
+On WSL, keep the repository and `node_modules` on the Linux ext4 filesystem, for example under `~/src/mypi`. A repository under `/mnt/c`, `/mnt/d`, or `/mnt/e` uses the Windows-mounted filesystem and can be substantially slower for Next.js, Webpack, TypeScript, and file browsing. When development must run from `/mnt/*`, the launcher moves `.next` and the development Webpack cache to `/tmp`; this reduces generated-file I/O but cannot remove source and dependency I/O cost. The client uses SSE with fallback polling for running-state updates. Production mode remains the recommended choice for demonstrations and long-running work because it has no development compiler lifecycle.
+
+Run the common checks with:
 
 ```bash
 npm test
@@ -133,7 +147,7 @@ node_modules/.bin/tsc --noEmit
 npm run lint
 ```
 
-Do not run `next build` or `npm run build` during normal development. It writes to `.next/` and can interfere with the development server; leave builds for release work.
+Do not run the production build concurrently with `next dev`; it writes to `.next/` and can interfere with the development server. Stop the development server before building, then use the production start command for a demonstration.
 
 Contributor guides: [Internationalization](./docs/i18n.md) and [Release process](./docs/release.md).
 

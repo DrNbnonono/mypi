@@ -1,6 +1,6 @@
 # Pi Documentation
 
-Pi is a minimal terminal coding harness. It is designed to stay small at the core while being extended through TypeScript extensions, skills, prompt templates, themes, and pi packages.
+Pi is a minimal terminal agent harness with two Session profiles: `coding` (the default) and the opt-in `sec` cybersecurity profile. It is designed to stay small at the core while being extended through TypeScript extensions, skills, prompt templates, themes, and Pi packages.
 
 ## Quick start
 
@@ -32,6 +32,8 @@ Then run it in a project directory:
 pi
 ```
 
+For a controlled cybersecurity Session, use `pi --agent-mode sec`. The Session mode is persisted and immutable; `/agent-mode coding|sec` creates a new blank Session in the same working directory. See the [SecAgent documentation](../../secagent/docs/index.md) for scope, policy, diagnostics, controlled benchmarks, and reports.
+
 Authenticate with `/login` for subscription providers, or set an API key such as `ANTHROPIC_API_KEY` before starting pi.
 
 For the full first-run flow, see [Quickstart](quickstart.md).
@@ -39,6 +41,7 @@ For the full first-run flow, see [Quickstart](quickstart.md).
 ## Start here
 
 - [Quickstart](quickstart.md) - install, authenticate, and run a first session.
+- [SecAgent](../../secagent/docs/index.md) - use the opt-in security profile and competition workflow.
 - [Using Pi](usage.md) - interactive mode, slash commands, context files, and CLI reference.
 - [Providers](providers.md) - subscription and API-key setup for built-in providers.
 - [llama.cpp](llama-cpp.md) - run a local router and manage models with `/llama`.

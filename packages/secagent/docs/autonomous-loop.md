@@ -22,6 +22,8 @@ SecurityState
 
 `security_autonomous` exposes `step`, `run`, and `inspect`. `run` is bounded to at most 50 steps and defaults to eight. The loop refuses to start without a task or to create a second unresolved decision. Strict and competition modes block targets outside explicit scope. Autonomous mode may continue outside scope only after controlled isolation and one-time authorization, with a high-risk warning attached to the audit record.
 
+The autonomous loop is a Sec profile capability, not a replacement for the generic Coding Agent loop. It is available only in a `sec` Session and does not install missing runtime packages or security tools. `/sec-doctor` reports readiness; a warning or missing prerequisite must be resolved in the controlled deployment before enabling autonomous execution.
+
 ## Deterministic execution inputs
 
 The model does not invent arbitrary command lines inside the autonomous loop. Candidate actions are converted to structured adapter input by `core/action-input.ts`. Only tools with an explicit autonomous input builder are eligible. Examples include bounded Nmap discovery, HTTP requests/fingerprinting, signed Nuclei templates, and read-only local artifact analysis.
@@ -47,3 +49,5 @@ The canonical benchmark matrix is defined in `src/scenarios/controlled.ts` and c
 Use `security_benchmark` with `action=run-controlled` to execute one isolated end-to-end harness. The benchmark score now combines invariant checks with successful capability coverage; a trace cannot receive a perfect score merely because safety properties pass while required capability families were never completed.
 
 For the final competition environment, run the same scenario matrix against disposable loopback/container fixtures with the real tools installed. This preserves benchmark logic while replacing only the deterministic command executor.
+
+Do not use the Next.js development server as the runtime supervisor for a long autonomous run. Development compilation, hot reload, or a process restart can interrupt the Web SSE connection and an in-flight operation. Use the production Web server behind a process supervisor, keep the Session directory persistent, and verify the restored snapshot and audit records before resuming.

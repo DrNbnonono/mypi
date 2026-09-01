@@ -137,7 +137,9 @@ interface ValidatedProject {
 }
 
 const UNREAD_SESSIONS_STORAGE_KEY = "pi-web:unread-session-ids";
-const RUNNING_SESSIONS_POLL_MS = 2500;
+const RUNNING_SESSIONS_FALLBACK_POLL_MS = 15_000;
+const RUNNING_SESSIONS_STREAM_RETRY_MS = 5_000;
+const RUNNING_SESSIONS_STREAM_WARMUP_MS = 2_500;
 
 function loadUnreadSessionIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -429,9 +431,9 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(() => new Set());
   const [unreadSessionIds, setUnreadSessionIds] = useState<Set<string>>(() => loadUnreadSessionIds());
   const previousRunningSessionIdsRef = useRef<Set<string>>(new Set());
-  // Once polling has delivered a snapshot it is the source of truth for
+  // Once the live transport or its fallback poll has delivered a snapshot it is the source of truth for
   // running state; late /api/sessions responses must not overwrite it.
-  const runningPollAuthoritativeRef = useRef(false);
+  const runningSnapshotAuthoritativeRef = useRef(false);
   const sessionRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const explorerRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileExplorerRef = useRef<FileExplorerHandle>(null);
@@ -447,7 +449,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
       setAllSessions(data.sessions);
       // Treat the fetched running set as an initial fallback only. Once the
       // lightweight poll is live, a slow session-list fetch cannot overwrite it.
-      if (!runningPollAuthoritativeRef.current) {
+      if (!runningSnapshotAuthoritativeRef.current) {
         setRunningSessionIds(new Set(data.runningSessionIds ?? []));
       }
       // Drop unread markers for sessions that no longer exist (e.g. deleted).
@@ -491,18 +493,26 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
 
   useEffect(() => {
     let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    let source: EventSource | null = null;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let controller: AbortController | null = null;
 
-    const clearTimer = () => {
-      if (timer) clearTimeout(timer);
-      timer = null;
+    const clearPollTimer = () => {
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = null;
     };
 
-    const schedule = () => {
-      clearTimer();
+    const applySnapshot = (ids: unknown) => {
+      if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) return;
+      runningSnapshotAuthoritativeRef.current = true;
+      setRunningSessionIds(new Set(ids));
+    };
+
+    const schedulePoll = (delay = RUNNING_SESSIONS_FALLBACK_POLL_MS) => {
+      clearPollTimer();
       if (stopped || document.visibilityState !== "visible") return;
-      timer = setTimeout(() => void poll(), RUNNING_SESSIONS_POLL_MS);
+      pollTimer = setTimeout(() => void poll(), delay);
     };
 
     const poll = async () => {
@@ -518,32 +528,72 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
         if (!res.ok) return;
         const data = await res.json() as { runningSessionIds?: string[] };
         if (stopped || controller !== current) return;
-        runningPollAuthoritativeRef.current = true;
-        setRunningSessionIds(new Set(data.runningSessionIds ?? []));
+        applySnapshot(data.runningSessionIds ?? []);
       } catch {
-        // Keep the last known state; the next visible-tab poll retries.
+        // Keep the last known state; the next fallback poll retries.
       } finally {
         if (controller === current) controller = null;
-        schedule();
+        if (!source || source.readyState !== EventSource.OPEN) schedulePoll();
       }
+    };
+
+    const disconnect = () => {
+      source?.close();
+      source = null;
+      controller?.abort();
+      controller = null;
+      clearPollTimer();
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = null;
+    };
+
+    const connect = () => {
+      if (stopped || document.visibilityState !== "visible") return;
+      source?.close();
+      const nextSource = new EventSource("/api/agent/running/events");
+      source = nextSource;
+      schedulePoll(RUNNING_SESSIONS_STREAM_WARMUP_MS);
+      nextSource.onopen = () => {
+        if (source !== nextSource) return;
+        clearPollTimer();
+        controller?.abort();
+        controller = null;
+      };
+      nextSource.onmessage = (message) => {
+        if (source !== nextSource) return;
+        try {
+          const event = JSON.parse(message.data) as { type?: unknown; runningSessionIds?: unknown };
+          if (event.type === "running") applySnapshot(event.runningSessionIds);
+        } catch {
+          // Ignore malformed frames; the heartbeat and next snapshot keep the stream usable.
+        }
+      };
+      nextSource.onerror = () => {
+        if (source !== nextSource) return;
+        nextSource.close();
+        source = null;
+        schedulePoll(0);
+        if (retryTimer) clearTimeout(retryTimer);
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          connect();
+        }, RUNNING_SESSIONS_STREAM_RETRY_MS);
+      };
     };
 
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void poll();
+        connect();
         return;
       }
-      clearTimer();
-      controller?.abort();
-      controller = null;
+      disconnect();
     };
 
-    void poll();
+    connect();
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       stopped = true;
-      clearTimer();
-      controller?.abort();
+      disconnect();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);

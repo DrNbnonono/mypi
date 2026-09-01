@@ -30,6 +30,8 @@ The default remains `coding`. Old sessions without `agentMode` are interpreted a
 
 `SecAgentRuntime` is the single stateful bridge. CLI/Web code consumes `snapshot()`, `command()`, and `subscribe()` rather than parsing custom security Session entries directly.
 
+The Web integration projects these methods through the Session Profile API and the Session event stream. The security workspace therefore reads the same persisted runtime state as the CLI, including task, scope, policy, isolation, evidence, decisions, audit, diagnostics, and report output. `agentMode` is included in Session and profile responses so a coding Session cannot accidentally render or invoke the security surface.
+
 ## 3. Sec-only generic runtime packages
 
 SecAgent reuses mature Pi packages and pins them in `src/runtime-packages.ts`:
@@ -204,7 +206,21 @@ packages/secagent/
 
 Repository `.pi` files may keep deployment/development overrides such as sandbox settings, but must not duplicate SecAgent implementation or specialist definitions.
 
-## 12. Next competition work
+## 12. Web and development boundary
+
+The Web UI supports the same two Session modes as the CLI. New Sessions default to `coding`; selecting `sec` creates a security Session whose mode is persisted. Existing Session history is not converted when the mode selector changes. The common Web shell and Sec workspace controls have English and Simplified Chinese translations. Dynamic model, finding, diagnostic, and tool output remains in the language returned by the runtime.
+
+On WSL, the repository and `node_modules` should live on Linux ext4, such as `~/src/mypi`. A repository under `/mnt/*` uses the Windows-mounted 9P filesystem; the Web launcher moves `.next` and the development Webpack cache to `/tmp`, but this does not remove the source and dependency I/O cost. Use the development server for UI changes and a production build for a stable demonstration or long-running Session:
+
+```bash
+npm run build
+npm run build --workspace=@agegr/pi-web
+npm run start --workspace=@agegr/pi-web
+```
+
+The development server's compiler and hot-reload lifecycle are not a process supervisor for an active Agent. A development restart can interrupt an SSE connection and an in-flight request; the Web client reconnects and reloads the persisted snapshot, but a stable demonstration should use the production server and an external process supervisor if required. Persisted Session entries and completed audit records remain recoverable across a server restart.
+
+## 13. Next competition work
 
 The architecture and closed loop are now implemented. Remaining work should concentrate on measured capability rather than another orchestration layer: calibrate planner weights/budgets against repeated benchmark runs, add real loopback/container fixtures with installed competition tools, expand structured MCP capability acquisition, strengthen artifact and protocol-specific adapters where scenarios expose gaps, and export reproducible benchmark summaries for the final report/PPT.
 

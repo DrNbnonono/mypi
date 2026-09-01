@@ -12,11 +12,37 @@
 
 # Pi Agent Harness
 
-This is the home of the Pi agent harness project including our self extensible coding agent.
+Pi is a self-extensible agent harness with two session profiles: `coding` for software development and the opt-in `sec` profile for controlled cybersecurity work. Coding remains the default, so existing commands and sessions keep their existing behavior.
 
 * **[@earendil-works/pi-coding-agent](packages/coding-agent)**: Interactive coding agent CLI
 * **[@earendil-works/pi-agent-core](packages/agent)**: Agent runtime with tool calling and state management
 * **[@earendil-works/pi-ai](packages/ai)**: Unified multi-provider LLM API (OpenAI, Anthropic, Google, …)
+* **[@earendil-works/pi-secagent](packages/secagent)**: Opt-in security profile, policy runtime, evidence model, controlled benchmarks, and auditable reports
+
+## Coding and Sec modes
+
+Use the normal `pi` command for coding, or explicitly create a security session:
+
+```bash
+pi                         # coding mode (default)
+pi --agent-mode sec        # security mode
+```
+
+The mode is persisted in the Session and cannot be changed in place. `/agent-mode coding|sec` creates a new blank Session in the same working directory; it does not copy the old conversation. Sessions created before mode support are treated as coding Sessions.
+
+SecAgent currently provides structured task intake, explicit authorization scope, `strict`/`competition`/`autonomous` policy modes, bounded tool adapters, planning and replanning, evidence verification, specialist-agent delegation, audit trails, controlled Web/Pwn/Reverse/Forensics/Killchain benchmarks, and Markdown/JSON reports. See [the SecAgent package](packages/secagent) and its [documentation index](packages/secagent/docs/index.md).
+
+Sec mode is deliberately opt-in. Runtime packages for sandboxing, MCP, specialist sessions, and tracing are loaded only for Sec Sessions:
+
+```bash
+npm install --ignore-scripts --no-save \
+  pi-sandbox@0.6.3 \
+  pi-mcp-adapter@2.23.0 \
+  pi-subagents@0.50.0 \
+  pi-trace-extension@0.1.14
+```
+
+These packages are deployment prerequisites, not coding-mode prerequisites. The `--no-save` form makes `npm ls` report them as `extraneous`; that is expected for a local deployment. A missing or mismatched package is reported by `/sec-doctor`, and does not silently enable autonomous execution.
 
 To learn more about Pi:
 
@@ -31,13 +57,30 @@ To learn more about Pi:
 | **[@earendil-works/pi-ai](packages/ai)** | Unified multi-provider LLM API (OpenAI, Anthropic, Google, etc.) |
 | **[@earendil-works/pi-agent-core](packages/agent)** | Agent runtime with tool calling and state management |
 | **[@earendil-works/pi-coding-agent](packages/coding-agent)** | Interactive coding agent CLI |
+| **[@earendil-works/pi-secagent](packages/secagent)** | Controlled cybersecurity profile and competition runtime |
 | **[@earendil-works/pi-tui](packages/tui)** | Terminal UI library with differential rendering |
+
+## WSL and runtime guidance
+
+For WSL development, keep the repository and `node_modules` on the Linux ext4 filesystem, for example under `~/src/mypi`. Linux tools that operate on `/mnt/c`, `/mnt/d`, or `/mnt/e` use the Windows-mounted 9P filesystem and can be substantially slower for the many small file operations performed by npm, TypeScript, Next.js, and Webpack. When Pi Web development must run from `/mnt/*`, its launcher moves `.next` and the development Webpack cache to `/tmp`; source and dependency reads remain limited by the mounted filesystem.
+
+Use `next dev` only for development. For a demonstration or a long-running Coding/Sec session, build first and run the production server:
+
+```bash
+npm run build
+npm run build --workspace=@agegr/pi-web
+npm run start --workspace=@agegr/pi-web
+```
+
+Production mode avoids the development compiler and hot-reload workload. The Web UI still uses the same Session files and profile APIs in both modes. See [Pi Web](packages/web-ui/README.md) for WSL, browser, and deployment details.
 
 For Slack/chat automation and workflows see [earendil-works/pi-chat](https://github.com/earendil-works/pi-chat).
 
 ## Permissions & Containerization
 
 Pi does not include a built-in permission system for restricting filesystem, process, network, or credential access. By default, it runs with the permissions of the user and process that launched it.
+
+SecAgent adds security workflow controls, not an OS boundary. Attachments are input data and never authorization. Before network or state-changing work, provide an explicit authorized scope. `autonomous` requires controlled sandbox/container isolation and one recorded confirmation; protected credential paths, OS/container boundaries, budgets, and audit records remain mandatory. Use only loopback, disposable fixtures, or targets explicitly authorized by the competition organizer.
 
 If you need stronger boundaries, containerize or sandbox Pi. See [packages/coding-agent/docs/containerization.md](packages/coding-agent/docs/containerization.md) for three patterns:
 

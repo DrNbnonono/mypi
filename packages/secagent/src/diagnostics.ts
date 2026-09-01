@@ -1,10 +1,9 @@
-import { access, readFile } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, parse } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IsolationState } from "./core/types.ts";
-import { SECAGENT_RUNTIME_PACKAGE_SOURCES } from "./runtime-packages.ts";
+import { resolveSecAgentRuntimePackage, SECAGENT_RUNTIME_PACKAGE_SOURCES } from "./runtime-packages.ts";
 import type { SecurityToolExecutionContext } from "./tools/adapter.ts";
 import { defaultSecurityToolExecutor } from "./tools/executor.ts";
 import { listSecurityToolAdapters } from "./tools/registry.ts";
@@ -37,8 +36,6 @@ export interface RunSecAgentDiagnosticsOptions {
 	executionContext?: Omit<SecurityToolExecutionContext, "cwd">;
 }
 
-const require = createRequire(import.meta.url);
-
 function runtimePackageName(source: string): string {
 	const withoutPrefix = source.startsWith("npm:") ? source.slice(4) : source;
 	const versionSeparator = withoutPrefix.lastIndexOf("@");
@@ -51,26 +48,12 @@ function runtimePackageVersion(source: string): string | undefined {
 	return versionSeparator > 0 ? withoutPrefix.slice(versionSeparator + 1) : undefined;
 }
 
-async function resolvedPackageVersion(entryPath: string): Promise<string | undefined> {
-	let current = dirname(entryPath);
-	const root = parse(current).root;
-	while (current !== root) {
-		try {
-			const parsed = JSON.parse(await readFile(join(current, "package.json"), "utf8")) as { version?: unknown };
-			return typeof parsed.version === "string" ? parsed.version : undefined;
-		} catch {
-			current = dirname(current);
-		}
-	}
-	return undefined;
-}
-
 async function runtimePackageCheck(source: string): Promise<SecAgentDiagnosticCheck> {
 	const packageName = runtimePackageName(source);
 	const expectedVersion = runtimePackageVersion(source);
-	try {
-		const entryPath = require.resolve(packageName);
-		const actualVersion = await resolvedPackageVersion(entryPath);
+	const resolvedPackage = resolveSecAgentRuntimePackage(packageName);
+	if (resolvedPackage) {
+		const actualVersion = resolvedPackage.version;
 		const versionMatches = expectedVersion === undefined || actualVersion === expectedVersion;
 		return {
 			id: `runtime-package:${packageName}`,
@@ -79,18 +62,23 @@ async function runtimePackageCheck(source: string): Promise<SecAgentDiagnosticCh
 			message: versionMatches
 				? `available${actualVersion ? ` at ${actualVersion}` : ""}`
 				: `expected ${expectedVersion}, resolved ${actualVersion ?? "unknown"}`,
-			details: { source, entryPath, expectedVersion, actualVersion },
-		};
-	} catch (error) {
-		return {
-			id: `runtime-package:${packageName}`,
-			label: packageName,
-			status: "warn",
-			message:
-				"not available in the current Node resolution scope; install the pinned package in the controlled deployment before starting the Sec profile",
-			details: { source, error: error instanceof Error ? error.message : String(error) },
+			details: {
+				source,
+				entryPath: resolvedPackage.entryPath,
+				rootPath: resolvedPackage.rootPath,
+				expectedVersion,
+				actualVersion,
+			},
 		};
 	}
+	return {
+		id: `runtime-package:${packageName}`,
+		label: packageName,
+		status: "warn",
+		message:
+			"not available in the current Node resolution scope; install the pinned package in the controlled deployment before starting the Sec profile",
+		details: { source },
+	};
 }
 
 async function writableDirectoryCheck(id: string, label: string, path: string): Promise<SecAgentDiagnosticCheck> {

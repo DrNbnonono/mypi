@@ -2,7 +2,7 @@
 
 [English](./README.md) | [日本語](./README.ja.md) | [Русский](./README.ru.md)
 
-[pi 编程智能体](https://github.com/earendil-works/pi)的本地浏览器界面。Pi Web 与 pi 共用本机配置和会话文件，可在浏览器中查找和继续对话、运行智能体、配置模型与资源，并查看项目文件。
+[Pi Agent Harness](https://github.com/earendil-works/pi) 的本地浏览器界面。Pi Web 与 pi 共用本机配置和会话文件，可在浏览器中查找和继续对话、运行 Coding 或 Sec 智能体、配置模型与资源，并查看项目文件和受控安全状态。
 
 中文微信群：请查看 [GitHub Discussions 帖子](https://github.com/agegr/pi-web/discussions/271)。
 
@@ -15,7 +15,9 @@
 - **项目文件工具**：浏览和上传文件、查看 Git Diff，并预览源码、Markdown、图片、音频、PDF 和 DOCX；文件变化后会自动刷新。
 - **Git worktree**：从侧边栏切换 checkout，同时把同一仓库不同 worktree 的会话归在一起。
 - **网页配置**：无需离开 Pi Web，即可管理 Provider 登录和 API Key、模型、模型测试、插件包及技能。
-- **英文和简体中文界面**：Pi Web 首次打开时跟随浏览器语言，也可从顶部栏切换语言。
+- **Coding/Sec 双模式**：创建会话时可选择默认的 Coding 模式或显式启用的 SecAgent 模式。模式会持久化；切换模式会在同一工作目录创建空白会话。
+- **安全工作区**：Sec 会话显示任务状态、授权范围、策略与隔离状态、证据、发现、决策、工具审计、诊断和 Markdown/JSON 报告。
+- **英文和简体中文界面**：Pi Web 首次打开时跟随浏览器语言，也可从顶部栏切换语言。Sec 工作区控件和结构化状态会随语言切换；模型与工具输出保留运行时返回的语言。
 
 ## 快速开始
 
@@ -66,6 +68,8 @@ PI_WEB_PASSWORD='足够长的随机密码' pi-web --hostname 0.0.0.0
 
 Basic Auth 不会加密传输中的密码。不要通过明文 HTTP 将 Pi Web 暴露到互联网；远程访问应使用可信反向代理提供 HTTPS，或通过可信 VPN。如果反向代理传递外部主机名，请把该名称精确加入 `PI_WEB_ALLOWED_HOSTS`。这个白名单不会改变 Pi Web 的监听地址。
 
+安全会话仍必须显式设置授权范围，附件内容不会自动授予授权。SecAgent 的 `autonomous` 策略还要求受控 sandbox/container 隔离或已记录的主办方受控隔离来源，并完成一次确认。不要将安全会话或凭据暴露给不受信任的网络。
+
 ### HTTP 代理
 
 服务端的模型和 API 请求会读取标准的 `HTTP_PROXY`、`HTTPS_PROXY` 和 `NO_PROXY` 环境变量。
@@ -103,7 +107,17 @@ npm install
 npm run dev
 ```
 
-开发服务器运行在 [http://127.0.0.1:30141](http://127.0.0.1:30141)。常用检查命令：
+开发服务器运行在 [http://127.0.0.1:30141](http://127.0.0.1:30141)，用于界面开发。稳定演示或长时间运行 Coding/Sec 会话时，请在仓库根目录执行：
+
+```bash
+npm run build
+npm run build --workspace=@agegr/pi-web
+npm run start --workspace=@agegr/pi-web
+```
+
+在 WSL 中，请将仓库和 `node_modules` 放在 Linux ext4 文件系统中，例如 `~/src/mypi`。位于 `/mnt/c`、`/mnt/d` 或 `/mnt/e` 的仓库使用 Windows 挂载文件系统，Next.js、Webpack、TypeScript 和文件浏览的大量小文件操作会明显变慢。如果必须从 `/mnt/*` 开发，启动器会把 `.next` 和开发 Webpack 缓存移到 `/tmp`；这能减少生成文件 I/O，但不能消除源码和依赖树的 I/O 开销。客户端通过 SSE 接收运行状态，并保留轮询降级。演示和长时间任务仍建议使用没有开发编译器生命周期的生产模式。
+
+常用检查命令：
 
 ```bash
 npm test
@@ -111,7 +125,7 @@ node_modules/.bin/tsc --noEmit
 npm run lint
 ```
 
-日常开发时不要运行 `next build` 或 `npm run build`。它们会写入 `.next/`，可能干扰开发服务器；仅在发布流程中执行构建。
+不要在 `next dev` 运行时并行执行生产构建；构建会写入 `.next/` 并可能干扰开发服务器。请先停止开发服务器，再构建并使用生产启动命令进行演示。
 
 贡献者文档：[国际化](./docs/i18n.md)和[发布流程](./docs/release.md)。
 

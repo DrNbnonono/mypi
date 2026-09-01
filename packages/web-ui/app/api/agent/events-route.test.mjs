@@ -21,3 +21,10 @@ test("SSE routes reuse one TextEncoder per stream", () => {
     assert.match(source, /controller\.enqueue\(encoder\.encode\(/);
   }
 });
+
+test("running-session SSE cleans up subscriptions and disables buffering", () => {
+  assert.match(runningEventsSource, /cancel\(\) \{\s*cancelStream\(false\)/);
+  assert.match(runningEventsSource, /req\.signal\.addEventListener\("abort", abortHandler, \{ once: true \}\)/);
+  assert.match(runningEventsSource, /"Cache-Control": "no-cache, no-transform"/);
+  assert.match(runningEventsSource, /"X-Accel-Buffering": "no"/);
+});

@@ -1,6 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, parse } from "node:path";
 import type { SecuritySessionStore } from "./core/state.ts";
 import { createSecAgentExtension } from "./extension.ts";
 import { createSecAgentAutonomousExtension } from "./extension-autonomous.ts";
@@ -13,7 +10,7 @@ import { createSecAgentStaticAnalysisExtension } from "./extension-static-analys
 import { createSecAgentWebAnalysisExtension } from "./extension-web-analysis.ts";
 import type { SecAgentInlineExtension } from "./host-contract.ts";
 import { SecAgentRuntime, type SecAgentRuntimeCommand } from "./runtime.ts";
-import { SECAGENT_RUNTIME_PACKAGE_SOURCES } from "./runtime-packages.ts";
+import { resolveSecAgentRuntimePackage, SECAGENT_RUNTIME_PACKAGE_SOURCES } from "./runtime-packages.ts";
 
 export interface CreateSecAgentProfileOptions {
 	runtimePackageSources?: readonly string[];
@@ -31,8 +28,6 @@ export interface SecAgentProfileDefinition {
 	createExtensions(): SecAgentInlineExtension[];
 }
 
-const require = createRequire(import.meta.url);
-
 function runtimePackageName(source: string): string | undefined {
 	if (!source.startsWith("npm:")) return undefined;
 	const spec = source.slice(4);
@@ -40,34 +35,12 @@ function runtimePackageName(source: string): string | undefined {
 	return separator > 0 ? spec.slice(0, separator) : spec;
 }
 
-function findPackageRoot(entryPath: string, packageName: string): string | undefined {
-	let current = dirname(entryPath);
-	const root = parse(current).root;
-	while (current !== root) {
-		const manifestPath = `${current}/package.json`;
-		if (existsSync(manifestPath)) {
-			try {
-				const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { name?: unknown };
-				if (manifest.name === packageName) return current;
-			} catch {
-				// Continue toward the filesystem root when a parent manifest is malformed.
-			}
-		}
-		current = dirname(current);
-	}
-	return undefined;
-}
-
 export function resolveSecAgentRuntimePackagePaths(sources: readonly string[]): string[] {
 	return sources.flatMap((source) => {
 		const packageName = runtimePackageName(source);
 		if (!packageName) return [source];
-		try {
-			const packageRoot = findPackageRoot(require.resolve(packageName), packageName);
-			return packageRoot ? [packageRoot] : [];
-		} catch {
-			return [];
-		}
+		const resolvedPackage = resolveSecAgentRuntimePackage(packageName);
+		return resolvedPackage ? [resolvedPackage.rootPath] : [];
 	});
 }
 

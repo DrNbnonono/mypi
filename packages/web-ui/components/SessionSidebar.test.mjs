@@ -18,14 +18,16 @@ test("does not register row-level session deletion shortcuts", () => {
   assert.doesNotMatch(sessionItemSource, /tabIndex=\{0\}/);
 });
 
-test("polls running sessions only while the tab is visible", () => {
-  assert.doesNotMatch(source, /new EventSource\("\/api\/agent\/running\/events"\)/);
+test("streams running sessions while visible and retains a bounded polling fallback", () => {
+  assert.match(source, /new EventSource\("\/api\/agent\/running\/events"\)/);
   assert.match(source, /fetch\("\/api\/agent\/running"/);
-  assert.match(source, /document\.visibilityState !== "visible"/);
+  assert.match(source, /RUNNING_SESSIONS_FALLBACK_POLL_MS = 15_000/);
+  assert.match(source, /RUNNING_SESSIONS_STREAM_RETRY_MS = 5_000/);
+  assert.match(source, /nextSource\.onerror = \(\) =>/);
   assert.match(source, /document\.addEventListener\("visibilitychange", onVisibilityChange\)/);
 });
 
-test("exposes the polled running-session set to the shell", () => {
+test("exposes the live running-session set to the shell", () => {
   assert.match(source, /onRunningSessionIdsChange\?: \(ids: Set<string>\) => void/);
   assert.match(source, /onRunningSessionIdsChange\?\.\(runningSessionIds\)/);
 });
