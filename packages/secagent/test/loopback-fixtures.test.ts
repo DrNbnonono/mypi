@@ -49,6 +49,7 @@ describe("offline loopback/container fixtures", () => {
 		for (const packageName of ["nmap", "curl", "file", "binutils", "binwalk", "libimage-exiftool-perl"]) {
 			expect(dockerfile).toMatch(new RegExp(`\\"${packageName}=[^\\"]+\\"`));
 		}
+		expect(dockerfile).toContain("libc6-dev");
 		expect(dockerfile).toContain("BASE_IMAGE=node:22-bookworm-slim");
 		expect(dockerfile).toContain("SecAgent image diagnostic");
 		expect(dockerfile).toContain("npm install --ignore-scripts --prefix /opt/secagent-runtime --save-exact");

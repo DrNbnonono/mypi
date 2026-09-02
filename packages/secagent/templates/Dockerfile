@@ -49,6 +49,7 @@ RUN --network=host set -eux; \
 		"binutils=${BINUTILS_VERSION}" \
 		"binwalk=${BINWALK_VERSION}" \
 		"libimage-exiftool-perl=${EXIFTOOL_VERSION}" \
+		libc6-dev \
 		gcc; then \
 		echo >&2 "SecAgent image diagnostic: a pinned Debian security-tool version is unavailable for BASE_IMAGE=${BASE_IMAGE}. Check the base distribution and override the version ARGs with package versions from that image."; \
 		exit 42; \
