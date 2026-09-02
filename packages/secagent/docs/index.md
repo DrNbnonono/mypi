@@ -9,6 +9,40 @@ SecAgent is Pi's opt-in cybersecurity profile. Pi remains a Coding/Sec dual-mode
 - [Autonomous loop](autonomous-loop.md) — candidate generation, planning, bounded execution, verification, observation, and replanning.
 - [Competition guide](competition.md) — controlled scenarios, diagnostics, deployment, test levels, deliverables, and score evidence.
 
+## Competition submission materials
+
+The following Chinese Markdown documents are organized as the supporting
+materials required for a competition submission. They describe the current
+repository implementation; a release candidate must replace marked
+placeholders with the final image digest, online URL, measured test logs, and
+team information.
+
+- [提交材料清单](提交材料清单.md) — submission inventory and final acceptance checklist.
+- [方案设计](方案设计.md) — problem definition, objectives, requirements, architecture, and safety boundary.
+- [开发文档](开发文档.md) — repository setup, package boundaries, extension development, and troubleshooting.
+- [部署手册](部署手册.md) — WSL, native, Docker/Compose, offline image, and model gateway deployment.
+- [用户手册](用户手册.md) — CLI and Web operation from Session creation through report export.
+- [测试报告](测试报告.md) — test strategy, cases, reproducibility, and release gates.
+- [技术报告](技术报告.md) — technical description of algorithms, state model, and evidence chain.
+- [方案介绍 PPT 提纲](方案介绍PPT提纲.md) — slide-by-slide presentation content.
+- [演示脚本](演示脚本.md) — reproducible live demonstration with normal and failure paths.
+- [原创性与保密性声明模板](原创性与保密性声明模板.md) — template for team review and signature.
+
+## Document status and evidence rules
+
+The documents use three labels:
+
+| Label | Meaning |
+| --- | --- |
+| `已实现` | The behavior is represented by source code and covered by an existing test or smoke path. |
+| `待赛前补测` | The repository has the integration point or fixture, but the final environment must produce the evidence log. |
+| `需填写` | The value depends on the team, organizer, deployment host, or final release and must not be invented here. |
+
+When a document says that a capability is supported, the corresponding
+evidence should include the commit, test command, output, configuration
+fingerprint, and (for an end-to-end run) the Session/report identifier. Do not
+use a model's natural-language claim as the only proof of a security finding.
+
 ## Current capability surface
 
 The implemented profile includes structured security task intake, explicit authorization scope, three policy modes (`strict`, `competition`, and `autonomous`), a registry and gateway for structured tool adapters, bounded specialist delegation, evidence and verification records, replanning, audit/replay data, controlled Web/Pwn/Reverse/Forensics/Killchain benchmarks, and Markdown/JSON reports.

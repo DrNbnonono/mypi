@@ -12,17 +12,22 @@
 - Use `security_autonomous` with `step` for one state transition or `run` for a bounded continuous search loop.
 - Use `security_benchmark catalog` to inspect the five controlled benchmark families and `security_benchmark controlled` with a scenario to evaluate the current trace.
 
-Prepare a local or competition image with Node.js `22.19.0` or newer and the four pinned Sec runtime packages:
+Prepare a local or competition image with Node.js `22.19.0` or newer and the four pinned Sec runtime packages. Install them into an isolated npm prefix; do not add them to the monorepo root:
 
 ```bash
-npm install --ignore-scripts --no-save \
+SECAGENT_RUNTIME_DIR="$HOME/.pi/secagent-runtime"
+npm init --yes --prefix "$SECAGENT_RUNTIME_DIR" >/dev/null
+npm install --ignore-scripts --prefix "$SECAGENT_RUNTIME_DIR" --save-exact \
   pi-sandbox@0.6.3 \
   pi-mcp-adapter@2.23.0 \
   pi-subagents@0.50.0 \
   pi-trace-extension@0.1.14
+export PI_SECAGENT_RUNTIME_DIR="$SECAGENT_RUNTIME_DIR"
 ```
 
 The packages are installed by the container template for the competition image. They are resolved only when a Sec profile is created; Coding Sessions do not depend on them. With `--no-save`, npm may label these packages `extraneous`, which is expected for this local deployment. Missing or mismatched packages produce diagnostics and do not enable autonomous mode.
+
+The Compose template exposes `SECAGENT_DEBIAN_MIRROR`, `SECAGENT_DEBIAN_SECURITY_MIRROR`, and `SECAGENT_NPM_REGISTRY` for reviewed competition mirrors. These variables change only the package source; the Debian security-tool versions and four Sec runtime package versions remain pinned. Build steps use host networking for package retrieval, while runtime services remain on the internal Compose network.
 
 For WSL development, place the repository and `node_modules` on Linux ext4, such as `~/src/mypi`. `/mnt/*` is a Windows-mounted filesystem and is slow for the small-file workload of npm, TypeScript, Next.js, and Webpack. When development runs from `/mnt/*`, the launcher uses `/tmp` for `.next` and the development Webpack cache, but the source and dependency tree remain on the mounted filesystem.
 

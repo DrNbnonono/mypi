@@ -42,3 +42,10 @@ plans/
 .pi/hf-sessions/
 .pi/hf-sessions-backup/
 collect.sh
+docs/
+!docs/
+!docs/*.docx
+!docs/*.pptx
+!packages/secagent/docs/
+!packages/secagent/docs/*.md
+prompt.md

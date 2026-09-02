@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { getEffortThinkingLevelMap, type ModelsDevReasoningOption } from "./models-dev-reasoning-options.ts";
@@ -32,6 +32,25 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const packageRoot = join(__dirname, "..");
+
+function isCrossDeviceRenameError(error: unknown): boolean {
+	return typeof error === "object" && error !== null && "code" in error && error.code === "EXDEV";
+}
+
+/**
+ * Overlay filesystems can reject a directory rename even when both paths share
+ * the same apparent parent. Keep the fast atomic path and fall back to a
+ * recursive copy only for that filesystem limitation.
+ */
+function moveDirectory(source: string, destination: string): void {
+	try {
+		renameSync(source, destination);
+	} catch (error) {
+		if (!isCrossDeviceRenameError(error)) throw error;
+		cpSync(source, destination, { recursive: true });
+		rmSync(source, { recursive: true, force: true });
+	}
+}
 
 function readGeneratorOptions(args: string[]): {
 	strict: boolean;
@@ -2943,13 +2962,13 @@ async function generateModels() {
 			}
 
 			const hadPreviousData = existsSync(dataDir);
-			if (hadPreviousData) renameSync(dataDir, previousDataDir);
+			if (hadPreviousData) moveDirectory(dataDir, previousDataDir);
 			try {
-				renameSync(stagedDataDir, dataDir);
+				moveDirectory(stagedDataDir, dataDir);
 				validateGeneratedModelData(packageRoot);
 			} catch (error) {
 				rmSync(dataDir, { recursive: true, force: true });
-				if (hadPreviousData && existsSync(previousDataDir)) renameSync(previousDataDir, dataDir);
+				if (hadPreviousData && existsSync(previousDataDir)) moveDirectory(previousDataDir, dataDir);
 				throw error;
 			}
 			restoreGeneratedCatalog = undefined;

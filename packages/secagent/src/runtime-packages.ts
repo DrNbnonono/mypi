@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join, parse } from "node:path";
+import { dirname, isAbsolute, join, parse } from "node:path";
 
 export const SECAGENT_RUNTIME_PACKAGE_SOURCES = [
 	"npm:pi-sandbox@0.6.3",
@@ -24,37 +24,48 @@ export function resolveSecAgentRuntimePackage(
 	packageName: string,
 	resolver: (specifier: string) => string = require.resolve,
 ): ResolvedSecAgentRuntimePackage | undefined {
-	let entryPath: string;
-	try {
-		entryPath = resolver(packageName);
-	} catch {
-		try {
-			entryPath = resolver(`${packageName}/package.json`);
-		} catch {
-			return undefined;
-		}
+	const resolvers = [resolver];
+	const runtimeDirectory = process.env.PI_SECAGENT_RUNTIME_DIR;
+	if (runtimeDirectory && isAbsolute(runtimeDirectory) && existsSync(runtimeDirectory)) {
+		resolvers.push(createRequire(join(runtimeDirectory, "package.json")).resolve);
 	}
 
-	let current = dirname(entryPath);
-	const filesystemRoot = parse(current).root;
-	while (current !== filesystemRoot) {
-		const manifestPath = join(current, "package.json");
-		if (existsSync(manifestPath)) {
+	for (const resolve of resolvers) {
+		let entryPath: string;
+		try {
+			entryPath = resolve(packageName);
+		} catch {
 			try {
-				const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { name?: unknown; version?: unknown };
-				if (manifest.name === packageName) {
-					return {
-						entryPath,
-						manifestPath,
-						rootPath: current,
-						version: typeof manifest.version === "string" ? manifest.version : undefined,
-					};
-				}
+				entryPath = resolve(`${packageName}/package.json`);
 			} catch {
-				// Continue toward the filesystem root when a parent manifest is malformed.
+				continue;
 			}
 		}
-		current = dirname(current);
+
+		let current = dirname(entryPath);
+		const filesystemRoot = parse(current).root;
+		while (current !== filesystemRoot) {
+			const manifestPath = join(current, "package.json");
+			if (existsSync(manifestPath)) {
+				try {
+					const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+						name?: unknown;
+						version?: unknown;
+					};
+					if (manifest.name === packageName) {
+						return {
+							entryPath,
+							manifestPath,
+							rootPath: current,
+							version: typeof manifest.version === "string" ? manifest.version : undefined,
+						};
+					}
+				} catch {
+					// Continue toward the filesystem root when a parent manifest is malformed.
+				}
+			}
+			current = dirname(current);
+		}
 	}
 	return undefined;
 }

@@ -45,11 +45,14 @@ describe("offline loopback/container fixtures", () => {
 
 	it("pins the required apt security tools and exposes both entries", async () => {
 		const dockerfile = await readFile(join(templateRoot, "Dockerfile"), "utf8");
+		const compose = await readFile(join(templateRoot, "docker-compose.yml"), "utf8");
 		for (const packageName of ["nmap", "curl", "file", "binutils", "binwalk", "libimage-exiftool-perl"]) {
 			expect(dockerfile).toMatch(new RegExp(`\\"${packageName}=[^\\"]+\\"`));
 		}
 		expect(dockerfile).toContain("BASE_IMAGE=node:22-bookworm-slim");
 		expect(dockerfile).toContain("SecAgent image diagnostic");
+		expect(dockerfile).toContain("npm install --ignore-scripts --prefix /opt/secagent-runtime --save-exact");
+		expect(dockerfile).toContain("PI_SECAGENT_RUNTIME_DIR=/opt/secagent-runtime");
 		expect(dockerfile).toContain("node packages/web-ui/bin/prepare-runtime.js --mark-only");
 		for (const runtimePackage of [
 			"pi-sandbox@0.6.3",
@@ -60,9 +63,24 @@ describe("offline loopback/container fixtures", () => {
 			expect(dockerfile).toContain(runtimePackage);
 		}
 		expect(dockerfile).toContain("HOME=/tmp/secagent-home");
+		expect(compose).toContain(`BASE_IMAGE: \${SECAGENT_BASE_IMAGE:-node:22-bookworm-slim}`);
+		expect(compose).toContain("secagent-home:/tmp/secagent-home");
+		expect(compose).toContain("healthcheck:");
 		const entrypoint = await readFile(join(templateRoot, "entrypoint.sh"), "utf8");
 		expect(entrypoint).toContain("--agent-mode sec");
 		expect(entrypoint).toContain("pi-web.js start");
+	});
+
+	it("ships the reproducible container acceptance entry points", async () => {
+		const acceptance = await readFile(join(packageRoot, "scripts/competition-acceptance.sh"), "utf8");
+		const controlled = await readFile(join(packageRoot, "scripts/controlled-acceptance.mjs"), "utf8");
+		expect(acceptance).toContain("--skip-build");
+		expect(acceptance).toContain("--keep");
+		expect(acceptance).toContain("controlled-acceptance.mjs");
+		expect(acceptance).toContain("profile-after-restart.json");
+		for (const scenario of ["web", "pwn", "reverse", "forensics", "killchain"])
+			expect(controlled).toContain(`"${scenario}"`);
+		expect(controlled).toContain("injectFailure: true");
 	});
 
 	it("contains no public network target or secret material", async () => {

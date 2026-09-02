@@ -6,15 +6,20 @@ SecAgent is a profile, not a second agent loop. `@earendil-works/pi-coding-agent
 
 ## Quick start
 
-Use Node.js `22.19.0` or newer. From the repository root, install the Sec-only runtime packages when local security execution or the competition demonstration requires them:
+Use Node.js `22.19.0` or newer. The four Sec-only runtime packages must be installed into an isolated prefix. Installing them directly in the monorepo root causes npm to resolve their optional peer dependency on an older `@earendil-works/pi-coding-agent` range and can produce `ERESOLVE`:
 
 ```bash
-npm install --ignore-scripts --no-save \
+SECAGENT_RUNTIME_DIR="$HOME/.pi/secagent-runtime"
+npm init --yes --prefix "$SECAGENT_RUNTIME_DIR" >/dev/null
+npm install --ignore-scripts --prefix "$SECAGENT_RUNTIME_DIR" --save-exact \
   pi-sandbox@0.6.3 \
   pi-mcp-adapter@2.23.0 \
   pi-subagents@0.50.0 \
   pi-trace-extension@0.1.14
+export PI_SECAGENT_RUNTIME_DIR="$SECAGENT_RUNTIME_DIR"
 ```
+
+The competition container performs the same isolated installation at `/opt/secagent-runtime`. The runtime directory is used only for Sec mode and is not added to the monorepo lockfile.
 
 The packages are intentionally not loaded or installed during Session startup. Because this command uses `--no-save`, `npm ls --depth=0` labels them `extraneous`; that is expected for a local deployment. `/sec-doctor` reports missing, unresolvable, or version-mismatched packages. Autonomous and demo readiness remain false until their prerequisites are satisfied.
 

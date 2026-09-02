@@ -1,0 +1,29 @@
+# The image installs dependencies with npm ci inside the build. Sending the
+# host installation is both unnecessary and very expensive on /mnt/e.
+node_modules
+**/node_modules
+
+# Build output and caches are regenerated in the image.
+dist
+**/dist
+.next
+**/.next
+coverage
+**/coverage
+.turbo
+**/.turbo
+
+# Repository metadata, local acceptance output, and runtime state must not be
+# copied into the competition image.
+.git
+.git/**
+.artifacts
+.artifacts/**
+.pi
+.pi/**
+
+# Local logs and editor/OS files.
+*.log
+**/*.log
+.DS_Store
+Thumbs.db

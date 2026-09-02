@@ -2,6 +2,14 @@ x-pi-secagent-image: &pi-secagent-image
   build:
     context: ../../..
     dockerfile: packages/secagent/templates/Dockerfile
+    network: host
+    entitlements:
+      - network.host
+    args:
+      BASE_IMAGE: ${SECAGENT_BASE_IMAGE:-node:22-bookworm-slim}
+      DEBIAN_MIRROR: ${SECAGENT_DEBIAN_MIRROR:-http://deb.debian.org/debian}
+      DEBIAN_SECURITY_MIRROR: ${SECAGENT_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+      NPM_REGISTRY: ${SECAGENT_NPM_REGISTRY:-https://registry.npmjs.org}
   read_only: true
   tmpfs:
     - /tmp:size=512m,mode=1777
@@ -33,6 +41,18 @@ services:
     command: ["web"]
     ports:
       - "127.0.0.1:${SECAGENT_WEB_PORT:-30141}:30141"
+    volumes:
+      - secagent-home:/tmp/secagent-home
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:30141/').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   # This target has no host-published port. It is reachable only by services
   # on the internal Compose network at http://fixture-web:8080/health.
@@ -44,7 +64,15 @@ services:
     environment:
       FIXTURE_HOST: 0.0.0.0
       FIXTURE_PORT: "8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
 networks:
   secagent-internal:
     internal: true
+
+volumes:
+  secagent-home:

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -31,5 +31,28 @@ describe("SecAgent runtime package resolution", () => {
 			rootPath: packageRoot,
 			version: "1.2.3",
 		});
+	});
+
+	it("falls back to the isolated runtime directory", async () => {
+		const runtimeRoot = await mkdtemp(join(tmpdir(), "pi-secagent-runtime-root-"));
+		const packageRoot = join(runtimeRoot, "node_modules", "fixture-extension");
+		temporaryDirectories.push(runtimeRoot);
+		await mkdir(packageRoot, { recursive: true });
+		await writeFile(
+			join(packageRoot, "package.json"),
+			JSON.stringify({ name: "fixture-extension", version: "2.0.0" }),
+			"utf8",
+		);
+		const previousRuntimeDirectory = process.env.PI_SECAGENT_RUNTIME_DIR;
+		process.env.PI_SECAGENT_RUNTIME_DIR = runtimeRoot;
+		try {
+			const resolved = resolveSecAgentRuntimePackage("fixture-extension", () => {
+				throw new Error("not available from the workspace");
+			});
+			expect(resolved).toMatchObject({ rootPath: packageRoot, version: "2.0.0" });
+		} finally {
+			if (previousRuntimeDirectory === undefined) delete process.env.PI_SECAGENT_RUNTIME_DIR;
+			else process.env.PI_SECAGENT_RUNTIME_DIR = previousRuntimeDirectory;
+		}
 	});
 });
