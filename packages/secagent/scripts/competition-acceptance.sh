@@ -157,7 +157,7 @@ run_phase fixture-start "${COMPOSE[@]}" --profile fixtures up -d fixture-web
 run_phase fixture-health "${COMPOSE[@]}" run --rm --no-deps --entrypoint sh pi-secagent -c 'set -eu; curl --fail --silent --show-error http://fixture-web:8080/health; nmap -sT -Pn --host-timeout 10s -p 8080 fixture-web'
 run_shell_phase real-artifact-tools 'set -eu; for path in /opt/secagent-fixtures/pwn/vulnerable /opt/secagent-fixtures/reverse/branchy; do file "$path"; strings "$path" | head -n 5; readelf -h "$path"; objdump -d --section=.text "$path" | head -n 12; binwalk "$path"; done; exiftool /opt/secagent-fixtures/forensics/sample.png'
 
-run_shell_phase sec-tests 'set -eu; npm run test --workspace=@earendil-works/pi-secagent'
+run_shell_phase sec-tests 'set -eu; cd /opt/pi; npm run test --workspace=@earendil-works/pi-secagent'
 run_phase controlled-benchmarks "${COMPOSE[@]}" run --rm --no-deps --entrypoint node pi-secagent /opt/pi/packages/secagent/scripts/controlled-acceptance.mjs --output /workspace/controlled-acceptance.json
 cp "$OUTPUT_DIR/workspace/controlled-acceptance.json" "$OUTPUT_DIR/controlled-acceptance.json"
 

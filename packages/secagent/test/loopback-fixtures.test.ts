@@ -79,6 +79,7 @@ describe("offline loopback/container fixtures", () => {
 		expect(acceptance).toContain("--keep");
 		expect(acceptance).toContain("controlled-acceptance.mjs");
 		expect(acceptance).toContain("profile-after-restart.json");
+		expect(acceptance).toContain("cd /opt/pi; npm run test --workspace=@earendil-works/pi-secagent");
 		for (const scenario of ["web", "pwn", "reverse", "forensics", "killchain"])
 			expect(controlled).toContain(`"${scenario}"`);
 		expect(controlled).toContain("injectFailure: true");
