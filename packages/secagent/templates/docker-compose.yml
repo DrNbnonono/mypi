@@ -9,6 +9,7 @@ x-pi-secagent-image: &pi-secagent-image
       BASE_IMAGE: ${SECAGENT_BASE_IMAGE:-node:22-bookworm-slim}
       DEBIAN_MIRROR: ${SECAGENT_DEBIAN_MIRROR:-http://deb.debian.org/debian}
       DEBIAN_SECURITY_MIRROR: ${SECAGENT_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+      DEBIAN_DNS_SERVER: ${SECAGENT_DEBIAN_DNS_SERVER:-}
       NPM_REGISTRY: ${SECAGENT_NPM_REGISTRY:-https://registry.npmjs.org}
   read_only: true
   tmpfs:

@@ -7,6 +7,7 @@ FROM ${BASE_IMAGE}
 ARG BASE_IMAGE
 ARG DEBIAN_MIRROR=http://deb.debian.org/debian
 ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
+ARG DEBIAN_DNS_SERVER=
 ARG NPM_REGISTRY=https://registry.npmjs.org
 
 WORKDIR /opt/pi
@@ -23,13 +24,24 @@ ARG BINWALK_VERSION=2.3.4+dfsg1-1
 ARG EXIFTOOL_VERSION=12.57+dfsg-1
 
 RUN --network=host set -eux; \
+	if [ -n "${DEBIAN_DNS_SERVER}" ]; then \
+		printf 'nameserver %s\n' "${DEBIAN_DNS_SERVER}" > /etc/resolv.conf; \
+	fi; \
 	sed -i -E \
 		"s|https?://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g; s|https?://deb.debian.org/debian|${DEBIAN_MIRROR}|g" \
 		/etc/apt/sources.list.d/debian.sources; \
-	if ! apt-get -o APT::Update::Error-Mode=any -o Acquire::Retries=5 update; then \
-		echo >&2 "SecAgent image diagnostic: Debian package indexes could not be downloaded for BASE_IMAGE=${BASE_IMAGE}. Check Docker DNS, proxy, or the configured Debian mirror."; \
-		exit 41; \
-	fi; \
+	attempt=1; \
+	while [ "$attempt" -le 3 ]; do \
+		if apt-get -o APT::Update::Error-Mode=any -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update; then \
+			break; \
+		fi; \
+		if [ "$attempt" -eq 3 ]; then \
+			echo >&2 "SecAgent image diagnostic: Debian package indexes could not be downloaded for BASE_IMAGE=${BASE_IMAGE}. Check Docker DNS, proxy, or the configured Debian mirror."; \
+			exit 41; \
+		fi; \
+		attempt=$((attempt + 1)); \
+		sleep 2; \
+	done; \
 	if ! apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
 		"nmap=${NMAP_VERSION}" \
 		"curl=${CURL_VERSION}" \
