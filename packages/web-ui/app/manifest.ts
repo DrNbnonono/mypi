@@ -3,9 +3,9 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Pi Web",
-    short_name: "Pi Web",
-    description: "Local web interface for the pi coding agent",
+    name: "Sec Web",
+    short_name: "Sec Web",
+    description: "Local web interface for the pi security and coding agent",
     start_url: "/",
     scope: "/",
     display: "standalone",
@@ -14,6 +14,12 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ["developer", "productivity"],
     lang: "en",
     icons: [
+      {
+        src: "/logo.png",
+        sizes: "2048x2048",
+        type: "image/png",
+        purpose: "any",
+      },
       {
         src: "/icons/icon-192.png",
         sizes: "192x192",

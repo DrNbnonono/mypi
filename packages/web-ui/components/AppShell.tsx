@@ -84,6 +84,7 @@ export function AppShell() {
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
 	const [newSessionAgentMode, setNewSessionAgentMode] = useState<AgentMode>("coding");
 	useEffect(() => setNewSessionAgentMode(getPreferredAgentMode()), []);
+  const activeAgentMode = selectedSession?.agentMode ?? newSessionAgentMode;
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(() => new Set());
   const handleRunningSessionIdsChange = useCallback((ids: Set<string>) => {
     setRunningSessionIds((previous) => {
@@ -113,6 +114,7 @@ export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [mobileToolbarMoreOpen, setMobileToolbarMoreOpen] = useState(false);
+  const [secWorkspaceExpanded, setSecWorkspaceExpanded] = useState(true);
   const [mobileSidebarReady, setMobileSidebarReady] = useState(false);
   const sidebarWidthRef = useRef(SIDEBAR_DEFAULT_WIDTH);
   const rightPanelWidthRef = useRef(RIGHT_PANEL_FALLBACK_WIDTH);
@@ -335,6 +337,10 @@ export function AppShell() {
   useEffect(() => {
     setMobileToolbarMoreOpen(false);
   }, [isMobile, selectedSession?.id, newSessionDraftId]);
+
+  useEffect(() => {
+    setSecWorkspaceExpanded(true);
+  }, [activeAgentMode, selectedSession?.id, newSessionDraftId]);
 
   useEffect(() => {
     if (!activeTopPanel || !topBarRef.current) return;
@@ -907,7 +913,7 @@ export function AppShell() {
 
   const activeFileTab = fileTabs.find((tab) => tab.id === activeFileTabId) ?? null;
   const activeCwdName = activeCwd ? getFileName(activeCwd) || activeCwd : null;
-  const windowTitle = activeCwdName ? `${activeCwdName} - Pi Web` : "Pi Web";
+  const windowTitle = activeCwdName ? `${activeCwdName} - Sec Web` : "Sec Web";
 
   useEffect(() => {
     const syncWindowTitle = () => {
@@ -1366,6 +1372,31 @@ export function AppShell() {
           </svg>
           {!mobile && <span>{translate("system.label")}</span>}
         </button>
+        {activeAgentMode === "sec" && (
+          <button
+            type="button"
+            onClick={() => setSecWorkspaceExpanded((expanded) => !expanded)}
+            title={translate(secWorkspaceExpanded ? "sec.workspace.collapse" : "sec.workspace.expand")}
+            aria-label={translate(secWorkspaceExpanded ? "sec.workspace.collapse" : "sec.workspace.expand")}
+            aria-expanded={secWorkspaceExpanded}
+            data-sec-workspace-toggle="true"
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              width: mobile ? TOP_BAR_ICON_BUTTON_SIZE : undefined,
+              height: "100%", padding: mobile ? 0 : "0 12px",
+              background: secWorkspaceExpanded ? "var(--bg-selected)" : "none",
+              border: "none", borderTop: "2px solid transparent",
+              borderRight: "1px solid var(--border)",
+              color: "var(--text-muted)", cursor: "pointer", flexShrink: 0,
+              fontSize: 11, whiteSpace: "nowrap", transition: "color 0.1s, background 0.1s",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              {secWorkspaceExpanded ? <path d="m6 15 6-6 6 6" /> : <path d="m6 9 6 6 6-6" />}
+            </svg>
+            {!mobile && <span>{translate(secWorkspaceExpanded ? "sec.workspace.collapseShort" : "sec.workspace.expandShort")}</span>}
+          </button>
+        )}
         {mobile && renderThemeButton(true)}
         {mobile && renderLanguageButton(true)}
       </div>
@@ -2096,7 +2127,13 @@ export function AppShell() {
         </div>
         {isMobile && renderProjectTrustWarning(true)}
         </div>
-		{(selectedSession?.agentMode ?? newSessionAgentMode) === "sec" && <SecAgentWorkspace sessionId={selectedSession?.id ?? null} />}
+		{activeAgentMode === "sec" && (
+          <SecAgentWorkspace
+            sessionId={selectedSession?.id ?? null}
+            expanded={secWorkspaceExpanded}
+            onExpandedChange={setSecWorkspaceExpanded}
+          />
+        )}
 
         {/* Chat content */}
         <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>

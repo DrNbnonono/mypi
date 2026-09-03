@@ -1,6 +1,6 @@
 import type { LocalePlugin } from "../types";
 
-/** Pi Web 内置简体中文语言包。 */
+/** Sec Web 内置简体中文语言包。 */
 export const zhCNLocale: LocalePlugin = {
   id: "zh-CN",
   label: "简体中文",
@@ -10,7 +10,7 @@ export const zhCNLocale: LocalePlugin = {
     "common.models": "模型",
     "common.skills": "技能",
     "common.plugins": "插件",
-    "appUpdate.releaseNotes": "Pi Web v{version} 可用，查看更新说明",
+    "appUpdate.releaseNotes": "Sec Web v{version} 可用，查看更新说明",
     "sidebar.hide": "隐藏侧边栏",
     "sidebar.show": "显示侧边栏",
     "theme.light": "浅色模式（点击切换到深色）",
@@ -390,6 +390,10 @@ export const zhCNLocale: LocalePlugin = {
     "models.thinkingLevelMap": "思考等级映射",
     "models.clearAll": "全部清除",
     "sec.title": "SEC 工作区",
+    "sec.workspace.collapse": "收起安全工作区",
+    "sec.workspace.expand": "展开安全工作区",
+    "sec.workspace.collapseShort": "收起",
+    "sec.workspace.expandShort": "展开",
     "sec.runtimeStarts": "新会话首次使用时，Sec 运行时才会启动。",
     "sec.loading": "正在加载 Sec 配置…",
     "sec.error.invalidJson": "Profile API 返回了无效 JSON",

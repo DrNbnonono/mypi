@@ -78,8 +78,8 @@ function launchTests(args, env) {
 function printWarningForLanHost(hostname, env) {
   if (["127.0.0.1", "localhost", "::1", "[::1]"].includes(hostname)) return;
   const message = env.PI_WEB_PASSWORD
-    ? "Pi Web is listening with Basic Auth over HTTP; use HTTPS or a trusted VPN."
-    : "Pi Web is listening without authentication; use this only on a trusted network.";
+    ? "Sec Web is listening with Basic Auth over HTTP; use HTTPS or a trusted VPN."
+    : "Sec Web is listening without authentication; use this only on a trusted network.";
   console.warn(`Warning: ${message}`);
 }
 
@@ -101,7 +101,7 @@ function main(argv = process.argv.slice(2)) {
   try {
     prepareRuntime({ env });
   } catch (error) {
-    console.error(`Unable to prepare Pi Web runtime: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`Unable to prepare Sec Web runtime: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
     return;
   }

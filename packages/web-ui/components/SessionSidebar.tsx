@@ -356,7 +356,7 @@ function PiWebTitle() {
   const [scrambling, setScrambling] = useState(false);
   const revertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const target = showVersion ? `${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}p${process.env.NEXT_PUBLIC_PI_VERSION ?? "0.0.0"}` : "Pi Web";
+  const target = showVersion ? `${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}p${process.env.NEXT_PUBLIC_PI_VERSION ?? "0.0.0"}` : "Sec Web";
   const display = useScramble(target, scrambling);
 
   const triggerScramble = useCallback((toVersion: boolean) => {
@@ -379,7 +379,7 @@ function PiWebTitle() {
   useEffect(() => () => { if (revertTimerRef.current) clearTimeout(revertTimerRef.current); }, []);
 
   return (
-    <button
+    <button className="sec-web-brand"
       onClick={handleClick}
       style={{
         background: "none", border: "none", padding: 0, cursor: "default",
@@ -389,7 +389,8 @@ function PiWebTitle() {
         minWidth: "6ch",
       }}
     >
-      {display}
+      <img src="/logo.png" alt="" width={24} height={24} />
+      <span>{display}</span>
     </button>
   );
 }

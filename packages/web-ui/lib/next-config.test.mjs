@@ -29,4 +29,5 @@ test("scopes Next.js output file tracing to the monorepo root", async () => {
   assert.equal(webpackConfig.externals.at(-1).undici, "commonjs undici");
   assert.equal(config.experimental.devMemoryThresholdRestart, false);
   assert.equal(config.experimental.webpackMemoryOptimizations, true);
+  assert.equal(config.devIndicators, false);
 });

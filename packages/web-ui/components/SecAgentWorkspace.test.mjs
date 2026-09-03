@@ -26,7 +26,10 @@ test("rejects malformed profile data and hides the workspace for coding sessions
 	assert.match(componentSource, /sec\.error\.invalidSnapshot/);
   assert.match(componentSource, /if \(result\.agentMode === "coding"\)/);
   assert.match(componentSource, /if \(loadState === "coding"\) return null/);
-  assert.match(appShellSource, /\(selectedSession\?\.agentMode \?\? newSessionAgentMode\) === "sec" && <SecAgentWorkspace/);
+  assert.match(appShellSource, /activeAgentMode === "sec"/);
+  assert.match(componentSource, /expanded\?: boolean/);
+  assert.match(componentSource, /onExpandedChange\?:/);
+  assert.match(appShellSource, /data-sec-workspace-toggle="true"/);
 });
 
 test("validates snapshots before rendering and classifies common target forms", () => {
@@ -106,7 +109,7 @@ test("keeps the complete sec namespace in both locale packages", () => {
 	const enKeys = Object.keys(enLocale.messages).filter((key) => key.startsWith("sec.")).sort();
 	const zhKeys = Object.keys(zhCNLocale.messages).filter((key) => key.startsWith("sec.")).sort();
 	assert.deepEqual(zhKeys, enKeys);
-	assert.equal(enKeys.length, 70);
+	assert.equal(enKeys.length, 74);
 	assert.notEqual(enLocale.messages["sec.title"], zhCNLocale.messages["sec.title"]);
 	assert.notEqual(enLocale.messages["sec.stage.recon"], zhCNLocale.messages["sec.stage.recon"]);
 });

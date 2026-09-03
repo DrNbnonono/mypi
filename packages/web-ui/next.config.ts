@@ -12,6 +12,10 @@ try {
 } catch { /* package not found, use default */ }
 
 const nextConfig: NextConfig = {
+  // The corner-mounted Next.js development indicator is not part of Sec Web
+  // and cannot be repositioned by the application. Keep the product surface
+  // free of framework controls.
+  devIndicators: false,
   experimental: {
     // Pi Web keeps long-lived Agent sessions in the server process. A Next
     // development memory restart would terminate those sessions mid-task, so

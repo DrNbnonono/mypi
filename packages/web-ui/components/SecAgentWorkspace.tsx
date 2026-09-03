@@ -170,20 +170,33 @@ function errorText(cause: unknown): string {
 	return cause instanceof Error ? cause.message : String(cause);
 }
 
-export function SecAgentWorkspace({ sessionId }: { sessionId: string | null }) {
+export function SecAgentWorkspace({
+	sessionId,
+	expanded: expandedProp,
+	onExpandedChange,
+}: {
+	sessionId: string | null;
+	expanded?: boolean;
+	onExpandedChange?: (expanded: boolean) => void;
+}) {
 	const { t } = useI18n();
 	const [snapshot, setSnapshot] = useState<SecurityProfileSnapshot | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [connectionError, setConnectionError] = useState<string | null>(null);
 	const [loadState, setLoadState] = useState<"idle" | "loading" | "ready" | "coding">("idle");
 	const [busy, setBusy] = useState(false);
-	const [expanded, setExpanded] = useState(true);
+	const [internalExpanded, setInternalExpanded] = useState(true);
 	const [scopeText, setScopeText] = useState("");
 	const [authorizationSource, setAuthorizationSource] = useState("");
 	const [isolationSource, setIsolationSource] = useState("");
 	const [isolationKind, setIsolationKind] = useState<"sandbox" | "external">("sandbox");
 	const [policyReason, setPolicyReason] = useState("");
 	const [report, setReport] = useState<{ format: "markdown" | "json"; content: string } | null>(null);
+	const expanded = expandedProp ?? internalExpanded;
+	const setExpanded = (next: boolean) => {
+		if (expandedProp === undefined) setInternalExpanded(next);
+		onExpandedChange?.(next);
+	};
 
 	const load = useCallback(async (signal: AbortSignal) => {
 		if (!sessionId) {
@@ -264,8 +277,11 @@ export function SecAgentWorkspace({ sessionId }: { sessionId: string | null }) {
 			}
 		};
 		source.onerror = () => setConnectionError(t("sec.error.connectionFailed"));
-		return () => source.close();
-	}, [loadState, sessionId, t]);
+		return () => {
+			refreshController?.abort();
+			source.close();
+		};
+	}, [loadState, refreshSnapshot, sessionId, t]);
 
 	const updateScope = async () => {
 		const values = scopeText.split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
@@ -313,68 +329,45 @@ export function SecAgentWorkspace({ sessionId }: { sessionId: string | null }) {
 		setTimeout(() => URL.revokeObjectURL(url), 0);
 	};
 
-	const sectionStyle = { border: "1px solid var(--border)", borderRadius: 6, padding: 8, minWidth: 0 } as const;
 	const currentStage = snapshot ? stageLabel(snapshot.state.stage, t) : t("sec.stage.notStarted");
 	const currentPolicy = snapshot ? policyModeLabel(snapshot.state.policyMode, t) : policyModeLabel("strict", t);
 	const currentIsolation = snapshot ? isolationStatusLabel(snapshot.state.isolation.status, t) : isolationStatusLabel("unverified", t);
 	if (loadState === "coding") return null;
 	return (
-		<div style={{ flexShrink: 0, borderBottom: "1px solid var(--border)", background: "var(--bg-panel)", fontSize: 12 }}>
-			<button type="button" onClick={() => setExpanded((value) => !value)} style={{ width: "100%", border: 0, background: "transparent", color: "var(--text)", padding: "7px 12px", textAlign: "left", cursor: "pointer", fontWeight: 600 }}>
-				{t("sec.title")} · {currentStage} · {currentPolicy} {expanded ? "▾" : "▸"}
+		<div className="sec-workspace-shell">
+			<button type="button" className="sec-workspace-header" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
+				<span className="sec-workspace-header-main">
+					<span className="sec-workspace-status-dot" aria-hidden="true" />
+					<strong>{t("sec.title")}</strong><span className="sec-workspace-header-divider">/</span><span>{currentStage}</span><span className="sec-workspace-policy-pill">{currentPolicy}</span>
+				</span>
+				<svg className="sec-workspace-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{expanded ? <path d="m6 15 6-6 6 6" /> : <path d="m6 9 6 6 6-6" />}</svg>
 			</button>
-			{expanded && (
-				<div style={{ maxHeight: 330, overflow: "auto", padding: "0 12px 12px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8 }}>
-					{!sessionId && <div style={sectionStyle}>{t("sec.runtimeStarts")}</div>}
-					{sessionId && loadState === "loading" && <div style={sectionStyle}>{t("sec.loading")}</div>}
-					{error && <div role="alert" style={{ ...sectionStyle, color: "#dc2626" }}>{error}</div>}
-					{connectionError && <div role="status" style={{ ...sectionStyle, color: "#b45309" }}>{connectionError}</div>}
-					<div style={sectionStyle}>
-						<div style={{ fontWeight: 600, marginBottom: 6 }}>{t("sec.scope.title")}</div>
-						<div>{snapshot?.state.goal || t("sec.scope.goalNotExtracted")}</div>
-						<textarea aria-label={t("sec.scope.authorizedTargets")} value={scopeText} onChange={(event) => setScopeText(event.target.value)} placeholder={t("sec.scope.authorizedTargetsPlaceholder")} style={{ width: "100%", minHeight: 52, marginTop: 6, background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)" }} />
-						<input aria-label={t("sec.scope.authorizationSource")} value={authorizationSource} onChange={(event) => setAuthorizationSource(event.target.value)} placeholder={t("sec.scope.authorizationSourcePlaceholder")} style={{ width: "100%", marginTop: 4 }} />
-						<button type="button" onClick={() => void updateScope().catch((cause) => setError(errorText(cause)))} disabled={!sessionId || busy}>{t("sec.scope.set")}</button>
-						<div style={{ marginTop: 5 }}>{snapshot?.state.scope.targets.map((target) => target.value).join(", ") || t("sec.scope.noAuthorizedTargets")}</div>
-					</div>
-					<div style={sectionStyle}>
-						<div style={{ fontWeight: 600, marginBottom: 6 }}>{t("sec.policy.title")}</div>
-						<div>{t("sec.policy.isolation", { status: currentIsolation })} {snapshot?.state.isolation.source ?? ""}</div>
-						<select aria-label={t("sec.policy.isolationType")} value={isolationKind} onChange={(event) => setIsolationKind(event.target.value as "sandbox" | "external")} disabled={busy} style={{ width: "100%", marginTop: 5 }}>
-							<option value="sandbox">{t("sec.isolation.type.sandbox")}</option>
-							<option value="external">{t("sec.isolation.type.external")}</option>
-						</select>
-						<input aria-label={t("sec.policy.isolationSource")} value={isolationSource} onChange={(event) => setIsolationSource(event.target.value)} placeholder={t("sec.policy.isolationSourcePlaceholder")} style={{ width: "100%", marginTop: 5 }} />
-						<input aria-label={t("sec.policy.changeReason")} value={policyReason} onChange={(event) => setPolicyReason(event.target.value)} placeholder={t("sec.policy.reasonPlaceholder")} style={{ width: "100%", marginTop: 4 }} />
-						<div style={{ display: "flex", gap: 4, marginTop: 5, flexWrap: "wrap" }}>
-							{(["strict", "competition", "autonomous"] as const).map((mode) => <button type="button" key={mode} onClick={() => void updatePolicy(mode).catch((cause) => setError(errorText(cause)))} disabled={!sessionId || busy}>{t(policyModeKeys[mode])}</button>)}
-						</div>
-						{snapshot?.autonomousBlockReason && <div style={{ color: "var(--text-dim)", marginTop: 5 }}>{snapshot.autonomousBlockReason}</div>}
-					</div>
-					<div style={sectionStyle}>
-						<div style={{ fontWeight: 600, marginBottom: 6 }}>{t("sec.evidence.title")}</div>
-						<div>{t("sec.evidence.summary", { evidence: snapshot?.state.evidence.length ?? 0, hypotheses: snapshot?.state.hypotheses.length ?? 0, findings: snapshot?.state.findings.length ?? 0 })}</div>
-						{snapshot?.state.findings.slice(-4).map((finding) => <div key={finding.id}>[{finding.severity}] {finding.summary}</div>)}
-					</div>
-					<div style={sectionStyle}>
-						<div style={{ fontWeight: 600, marginBottom: 6 }}>{t("sec.audit.title")}</div>
-						<div>{t("sec.audit.summary", { decisions: snapshot?.state.decisions.length ?? 0, calls: snapshot?.audit.length ?? 0 })}</div>
-						{snapshot?.audit.slice(-4).map((record) => <div key={record.id}>{t("sec.audit.entry", { status: record.blocked ? t("sec.audit.status.blocked") : record.isError ? t("sec.audit.status.error") : t("sec.audit.status.ok"), tool: record.toolName, decision: policyDecisionLabel(record.policyDecision, t) })}</div>)}
-					</div>
-					<div style={{ ...sectionStyle, gridColumn: "1 / -1" }}>
-						<div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-							<strong>{t("sec.diagnostics.title")}</strong>
-							<button type="button" disabled={!sessionId || busy} onClick={() => void runDiagnostics().catch((cause) => setError(errorText(cause)))}>{t("sec.diagnostics.run")}</button>
-							{snapshot?.diagnostics && <span>{t("sec.diagnostics.summary", { runtime: snapshot.diagnostics.runtimeReady ? t("sec.status.ready") : t("sec.status.blocked"), autonomous: snapshot.diagnostics.autonomousReady ? t("sec.status.ready") : t("sec.status.blocked"), demo: snapshot.diagnostics.demoReady ? t("sec.status.ready") : t("sec.status.blocked") })}</span>}
-						</div>
-						{snapshot?.diagnostics?.checks.map((check) => <div key={check.id}>[{diagnosticStatusLabel(check.status, t)}] {check.label}: {check.message}</div>)}
-					</div>
-					<div style={{ ...sectionStyle, gridColumn: "1 / -1" }}>
-						<div style={{ display: "flex", gap: 5, alignItems: "center" }}><strong>{t("sec.report.title")}</strong><button type="button" disabled={!sessionId || busy} onClick={() => void buildReport("markdown").catch((cause) => setError(errorText(cause)))}>Markdown</button><button type="button" disabled={!sessionId || busy} onClick={() => void buildReport("json").catch((cause) => setError(errorText(cause)))}>JSON</button><button type="button" disabled={!report} onClick={downloadReport}>{t("sec.report.download")}</button></div>
-						{report && <pre style={{ maxHeight: 150, overflow: "auto", whiteSpace: "pre-wrap", marginBottom: 0 }}>{report.content}</pre>}
-					</div>
+			{expanded && <div className="sec-workspace-grid">
+				{!sessionId && <div className="sec-workspace-card sec-workspace-card-muted">{t("sec.runtimeStarts")}</div>}
+				{sessionId && loadState === "loading" && <div className="sec-workspace-card sec-workspace-card-muted">{t("sec.loading")}</div>}
+				{error && <div role="alert" className="sec-workspace-card sec-workspace-card-wide sec-workspace-card-error">{error}</div>}
+				{connectionError && <div role="status" className="sec-workspace-card sec-workspace-card-wide sec-workspace-card-warning">{connectionError}</div>}
+				<div className="sec-workspace-card">
+					<div className="sec-workspace-card-kicker">01</div><div className="sec-workspace-card-title">{t("sec.scope.title")}</div>
+					<div className="sec-workspace-card-value">{snapshot?.state.goal || t("sec.scope.goalNotExtracted")}</div>
+					<label className="sec-workspace-field"><span>{t("sec.scope.authorizedTargets")}</span><textarea aria-label={t("sec.scope.authorizedTargets")} value={scopeText} onChange={(event) => setScopeText(event.target.value)} placeholder={t("sec.scope.authorizedTargetsPlaceholder")} /></label>
+					<label className="sec-workspace-field"><span>{t("sec.scope.authorizationSource")}</span><input aria-label={t("sec.scope.authorizationSource")} value={authorizationSource} onChange={(event) => setAuthorizationSource(event.target.value)} placeholder={t("sec.scope.authorizationSourcePlaceholder")} /></label>
+					<div className="sec-workspace-actions"><button className="sec-workspace-button sec-workspace-button-primary" type="button" onClick={() => void updateScope().catch((cause) => setError(errorText(cause)))} disabled={!sessionId || busy}>{t("sec.scope.set")}</button><span className="sec-workspace-card-muted">{snapshot?.state.scope.targets.map((target) => target.value).join(", ") || t("sec.scope.noAuthorizedTargets")}</span></div>
 				</div>
-			)}
+				<div className="sec-workspace-card">
+					<div className="sec-workspace-card-kicker">02</div><div className="sec-workspace-card-title">{t("sec.policy.title")}</div>
+					<div className="sec-workspace-card-value">{t("sec.policy.isolation", { status: currentIsolation })} {snapshot?.state.isolation.source ?? ""}</div>
+					<label className="sec-workspace-field"><span>{t("sec.policy.isolationType")}</span><select aria-label={t("sec.policy.isolationType")} value={isolationKind} onChange={(event) => setIsolationKind(event.target.value as "sandbox" | "external")} disabled={busy}><option value="sandbox">{t("sec.isolation.type.sandbox")}</option><option value="external">{t("sec.isolation.type.external")}</option></select></label>
+					<label className="sec-workspace-field"><span>{t("sec.policy.isolationSource")}</span><input aria-label={t("sec.policy.isolationSource")} value={isolationSource} onChange={(event) => setIsolationSource(event.target.value)} placeholder={t("sec.policy.isolationSourcePlaceholder")} /></label>
+					<label className="sec-workspace-field"><span>{t("sec.policy.changeReason")}</span><input aria-label={t("sec.policy.changeReason")} value={policyReason} onChange={(event) => setPolicyReason(event.target.value)} placeholder={t("sec.policy.reasonPlaceholder")} /></label>
+					<div className="sec-workspace-actions">{(["strict", "competition", "autonomous"] as const).map((mode) => <button className={`sec-workspace-button${mode === snapshot?.state.policyMode ? " sec-workspace-button-active" : ""}`} type="button" key={mode} onClick={() => void updatePolicy(mode).catch((cause) => setError(errorText(cause)))} disabled={!sessionId || busy}>{t(policyModeKeys[mode])}</button>)}</div>
+					{snapshot?.autonomousBlockReason && <div className="sec-workspace-card-muted">{snapshot.autonomousBlockReason}</div>}
+				</div>
+				<div className="sec-workspace-card"><div className="sec-workspace-card-kicker">03</div><div className="sec-workspace-card-title">{t("sec.evidence.title")}</div><div className="sec-workspace-card-value">{t("sec.evidence.summary", { evidence: snapshot?.state.evidence.length ?? 0, hypotheses: snapshot?.state.hypotheses.length ?? 0, findings: snapshot?.state.findings.length ?? 0 })}</div><div className="sec-workspace-list">{snapshot?.state.findings.slice(-4).map((finding) => <div key={finding.id}><span className="sec-workspace-severity">{finding.severity}</span> {finding.summary}</div>)}</div></div>
+				<div className="sec-workspace-card"><div className="sec-workspace-card-kicker">04</div><div className="sec-workspace-card-title">{t("sec.audit.title")}</div><div className="sec-workspace-card-value">{t("sec.audit.summary", { decisions: snapshot?.state.decisions.length ?? 0, calls: snapshot?.audit.length ?? 0 })}</div><div className="sec-workspace-list">{snapshot?.audit.slice(-4).map((record) => <div key={record.id}>{t("sec.audit.entry", { status: record.blocked ? t("sec.audit.status.blocked") : record.isError ? t("sec.audit.status.error") : t("sec.audit.status.ok"), tool: record.toolName, decision: policyDecisionLabel(record.policyDecision, t) })}</div>)}</div></div>
+				<div className="sec-workspace-card sec-workspace-card-wide sec-workspace-diagnostics"><div className="sec-workspace-card-title">{t("sec.diagnostics.title")}</div><div className="sec-workspace-actions"><button className="sec-workspace-button sec-workspace-button-primary" type="button" disabled={!sessionId || busy} onClick={() => void runDiagnostics().catch((cause) => setError(errorText(cause)))}>{t("sec.diagnostics.run")}</button>{snapshot?.diagnostics && <span className="sec-workspace-card-muted">{t("sec.diagnostics.summary", { runtime: snapshot.diagnostics.runtimeReady ? t("sec.status.ready") : t("sec.status.blocked"), autonomous: snapshot.diagnostics.autonomousReady ? t("sec.status.ready") : t("sec.status.blocked"), demo: snapshot.diagnostics.demoReady ? t("sec.status.ready") : t("sec.status.blocked") })}</span>}</div><div className="sec-workspace-list">{snapshot?.diagnostics?.checks.map((check) => <div key={check.id}><span className={`sec-workspace-check sec-workspace-check-${check.status}`}>{diagnosticStatusLabel(check.status, t)}</span> {check.label}: {check.message}</div>)}</div></div>
+				<div className="sec-workspace-card sec-workspace-card-wide sec-workspace-report"><div className="sec-workspace-card-title">{t("sec.report.title")}</div><div className="sec-workspace-actions"><button className="sec-workspace-button" type="button" disabled={!sessionId || busy} onClick={() => void buildReport("markdown").catch((cause) => setError(errorText(cause)))}>Markdown</button><button className="sec-workspace-button" type="button" disabled={!sessionId || busy} onClick={() => void buildReport("json").catch((cause) => setError(errorText(cause)))}>JSON</button><button className="sec-workspace-button sec-workspace-button-primary" type="button" disabled={!report} onClick={downloadReport}>{t("sec.report.download")}</button></div>{report && <pre className="sec-workspace-report-preview">{report.content}</pre>}</div>
+			</div>}
 		</div>
 	);
 }

@@ -4,12 +4,17 @@ import "katex/dist/katex.min.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Pi Web",
-  description: "Pi Web interface for the pi coding agent",
-  applicationName: "Pi Web",
+  title: "Sec Web",
+  description: "Sec Web interface for the pi security and coding agent",
+  applicationName: "Sec Web",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
+      {
+        url: "/logo.png",
+        sizes: "2048x2048",
+        type: "image/png",
+      },
       {
         url: "/icons/icon-192.png",
         sizes: "192x192",
@@ -27,7 +32,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Pi Web",
+    title: "Sec Web",
   },
   formatDetection: {
     telephone: false,
