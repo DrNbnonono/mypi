@@ -8,6 +8,8 @@ SecAgent is Pi's opt-in cybersecurity profile. Pi remains a Coding/Sec dual-mode
 - [Architecture](architecture.md) — profile ownership, Session persistence, runtime packages, tools, evidence, and Web integration.
 - [Autonomous loop](autonomous-loop.md) — candidate generation, planning, bounded execution, verification, observation, and replanning.
 - [Competition guide](competition.md) — controlled scenarios, diagnostics, deployment, test levels, deliverables, and score evidence.
+- [赛题需求审查](赛题需求审查.md) — requirement-to-implementation matrix, verified gaps, research basis, and final submission gates.
+- [靶场全量测评报告](靶场全量测评报告.md) — OWASP Juice Shop v20.2.0 实测评测（110/116）：逐轮用时/token/思维链数据、工具链修复记录、coding vs sec 对照、未解题归因。
 
 ## Competition submission materials
 

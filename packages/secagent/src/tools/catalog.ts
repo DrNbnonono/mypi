@@ -93,6 +93,15 @@ export const SECURITY_TOOL_CATALOG: readonly SecurityToolMetadata[] = [
 		preconditions: NETWORK_SCOPE,
 	}),
 	tool(
+		"browser",
+		"web",
+		"P2",
+		"network-target",
+		["browser.navigate", "browser.dom.inspect", "browser.interact", "browser.network.observe"],
+		"Use the isolated Playwright service for browser-state and client-side verification.",
+		{ agents: ["sec-web"], preconditions: [...NETWORK_SCOPE, "isolated browser service is available"] },
+	),
+	tool(
 		"wget",
 		"network",
 		"P1",

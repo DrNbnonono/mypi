@@ -3,8 +3,26 @@ import type { SecurityToolCommandResult, SecurityToolExecutor } from "./adapter.
 
 const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
 
-function decodeOutput(chunks: Buffer[], maxOutputBytes: number): string {
-	return Buffer.concat(chunks).subarray(0, maxOutputBytes).toString("utf8");
+interface BoundedOutput {
+	chunks: Buffer[];
+	bytes: number;
+	truncated: boolean;
+}
+
+function appendOutput(output: BoundedOutput, chunk: Buffer, maxOutputBytes: number): void {
+	const remaining = maxOutputBytes - output.bytes;
+	if (remaining <= 0) {
+		output.truncated = true;
+		return;
+	}
+	const selected = chunk.subarray(0, remaining);
+	output.chunks.push(selected);
+	output.bytes += selected.byteLength;
+	if (selected.byteLength < chunk.byteLength) output.truncated = true;
+}
+
+function decodeOutput(output: BoundedOutput): string {
+	return Buffer.concat(output.chunks, output.bytes).toString("utf8");
 }
 
 export interface NodeSecurityToolExecutorOptions {
@@ -28,24 +46,52 @@ export class NodeSecurityToolExecutor implements SecurityToolExecutor {
 			const startedAt = Date.now();
 			let timedOut = false;
 			let settled = false;
-			const stdout: Buffer[] = [];
-			const stderr: Buffer[] = [];
-			const child = spawn(command, [...args], { cwd: options.cwd, shell: false, stdio: ["ignore", "pipe", "pipe"] });
+			let forceKill: NodeJS.Timeout | undefined;
+			const stdout: BoundedOutput = { chunks: [], bytes: 0, truncated: false };
+			const stderr: BoundedOutput = { chunks: [], bytes: 0, truncated: false };
+			const child = spawn(command, [...args], {
+				cwd: options.cwd,
+				shell: false,
+				detached: process.platform !== "win32",
+				stdio: ["ignore", "pipe", "pipe"],
+			});
+			const terminate = (): void => {
+				if (process.platform !== "win32" && child.pid !== undefined) {
+					try {
+						process.kill(-child.pid, "SIGTERM");
+					} catch {
+						child.kill("SIGTERM");
+					}
+				} else {
+					child.kill("SIGTERM");
+				}
+				forceKill = setTimeout(() => {
+					if (settled) return;
+					if (process.platform !== "win32" && child.pid !== undefined) {
+						try {
+							process.kill(-child.pid, "SIGKILL");
+						} catch {
+							child.kill("SIGKILL");
+						}
+					} else child.kill("SIGKILL");
+				}, 1_000);
+			};
 			const timeout = setTimeout(() => {
 				timedOut = true;
-				child.kill("SIGTERM");
+				terminate();
 			}, options.timeoutMs);
 			const abort = (): void => {
-				child.kill("SIGTERM");
+				terminate();
 			};
 			if (options.signal?.aborted) abort();
 			else options.signal?.addEventListener("abort", abort, { once: true });
-			child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
-			child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+			child.stdout.on("data", (chunk: Buffer) => appendOutput(stdout, chunk, this.maxOutputBytes));
+			child.stderr.on("data", (chunk: Buffer) => appendOutput(stderr, chunk, this.maxOutputBytes));
 			child.once("error", (error: NodeJS.ErrnoException) => {
 				if (settled) return;
 				settled = true;
 				clearTimeout(timeout);
+				if (forceKill) clearTimeout(forceKill);
 				options.signal?.removeEventListener("abort", abort);
 				reject(error);
 			});
@@ -53,14 +99,17 @@ export class NodeSecurityToolExecutor implements SecurityToolExecutor {
 				if (settled) return;
 				settled = true;
 				clearTimeout(timeout);
+				if (forceKill) clearTimeout(forceKill);
 				options.signal?.removeEventListener("abort", abort);
 				resolve({
-					stdout: decodeOutput(stdout, this.maxOutputBytes),
-					stderr: decodeOutput(stderr, this.maxOutputBytes),
+					stdout: decodeOutput(stdout),
+					stderr: decodeOutput(stderr),
 					exitCode,
 					signal: signal ?? undefined,
 					timedOut,
 					durationMs: Date.now() - startedAt,
+					stdoutTruncated: stdout.truncated,
+					stderrTruncated: stderr.truncated,
 				});
 			});
 		});

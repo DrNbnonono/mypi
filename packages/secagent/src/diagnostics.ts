@@ -6,7 +6,7 @@ import type { IsolationState } from "./core/types.ts";
 import { resolveSecAgentRuntimePackage, SECAGENT_RUNTIME_PACKAGE_SOURCES } from "./runtime-packages.ts";
 import type { SecurityToolExecutionContext } from "./tools/adapter.ts";
 import { defaultSecurityToolExecutor } from "./tools/executor.ts";
-import { listSecurityToolAdapters } from "./tools/registry.ts";
+import { listSecurityToolAdapters, listSecurityToolMetadata } from "./tools/registry.ts";
 
 export type SecAgentDiagnosticStatus = "pass" | "warn" | "fail";
 
@@ -116,11 +116,32 @@ async function specialistAgentCheck(): Promise<SecAgentDiagnosticCheck> {
 	};
 }
 
+function toolAdapterCoverageCheck(): SecAgentDiagnosticCheck {
+	const catalog = listSecurityToolMetadata().filter((metadata) => metadata.category !== "internal");
+	const adapters = new Set(listSecurityToolAdapters().map((adapter) => adapter.metadata.name));
+	const missing = catalog.filter((metadata) => !adapters.has(metadata.name)).map((metadata) => metadata.name);
+	return {
+		id: "tool-adapter-coverage",
+		label: "Tool adapter coverage",
+		status: missing.length === 0 ? "pass" : "warn",
+		message:
+			missing.length === 0
+				? `${catalog.length} catalog tools have executable adapters`
+				: `${catalog.length - missing.length}/${catalog.length} catalog tools have executable adapters; metadata-only: ${missing.join(", ")}`,
+		details: {
+			catalogTools: catalog.map((metadata) => metadata.name),
+			adapterTools: [...adapters],
+			metadataOnlyTools: missing,
+		},
+	};
+}
+
 export async function runSecAgentDiagnostics(options: RunSecAgentDiagnosticsOptions): Promise<SecAgentDiagnostics> {
 	const executionContext: SecurityToolExecutionContext = {
 		cwd: options.cwd,
 		executor: options.executionContext?.executor ?? defaultSecurityToolExecutor,
 		signal: options.executionContext?.signal,
+		browser: options.executionContext?.browser,
 	};
 	const toolChecks = await Promise.all(
 		listSecurityToolAdapters().map(async (adapter): Promise<SecAgentDiagnosticCheck> => {
@@ -174,6 +195,7 @@ export async function runSecAgentDiagnostics(options: RunSecAgentDiagnosticsOpti
 			details: { isolation: options.isolation },
 		},
 		await specialistAgentCheck(),
+		toolAdapterCoverageCheck(),
 		...(await Promise.all(SECAGENT_RUNTIME_PACKAGE_SOURCES.map(runtimePackageCheck))),
 		await writableDirectoryCheck("working-directory", "Working directory", options.cwd),
 		await writableDirectoryCheck("temporary-directory", "Temporary directory", tmpdir()),

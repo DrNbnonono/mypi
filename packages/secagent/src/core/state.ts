@@ -10,7 +10,7 @@ export interface SecuritySessionStore {
 
 export function createInitialSecurityState(): SecurityState {
 	return {
-		version: 5,
+		version: 6,
 		revision: 0,
 		goal: "",
 		stage: "understanding",
@@ -19,10 +19,12 @@ export function createInitialSecurityState(): SecurityState {
 		scope: { targets: [] },
 		evidence: [],
 		evidenceGraph: { edges: [], hypotheses: [], verifications: [] },
+		targetGraph: { nodes: [], edges: [], revision: 0 },
 		hypotheses: [],
 		rejectedHypotheses: [],
 		findings: [],
 		decisions: [],
+		actions: [],
 		replans: [],
 		observerSignals: [],
 		delegations: [],
@@ -48,6 +50,12 @@ function cloneState(state: SecurityState): SecurityState {
 				evidenceIds: [...verification.evidenceIds],
 			})),
 		},
+		targetGraph: {
+			nodes: state.targetGraph.nodes.map((node) => ({ ...node, evidenceIds: [...node.evidenceIds] })),
+			edges: state.targetGraph.edges.map((edge) => ({ ...edge, evidenceIds: [...edge.evidenceIds] })),
+			revision: state.targetGraph.revision,
+		},
+		competition: state.competition ? structuredClone(state.competition) : undefined,
 		hypotheses: [...state.hypotheses],
 		rejectedHypotheses: [...state.rejectedHypotheses],
 		findings: state.findings.map((item) => ({
@@ -68,6 +76,7 @@ function cloneState(state: SecurityState): SecurityState {
 			})),
 			budgetSnapshot: decision.budgetSnapshot ? structuredClone(decision.budgetSnapshot) : undefined,
 		})),
+		actions: state.actions.map((action) => ({ ...action })),
 		replans: state.replans.map((replan) => ({ ...replan })),
 		observerSignals: state.observerSignals.map((signal) => ({ ...signal, decisionIds: [...signal.decisionIds] })),
 		delegations: state.delegations.map((delegation) => ({ ...delegation, evidenceIds: [...delegation.evidenceIds] })),
@@ -111,6 +120,25 @@ export function applySecurityEvent(state: SecurityState, event: SecurityEvent): 
 			return next;
 		case "evidence_linked":
 			next.evidenceGraph.edges.push({ ...event.edge });
+			return next;
+		case "target_node_recorded": {
+			const node = { ...event.node, evidenceIds: [...event.node.evidenceIds] };
+			const index = next.targetGraph.nodes.findIndex((item) => item.id === node.id);
+			if (index >= 0) next.targetGraph.nodes[index] = node;
+			else next.targetGraph.nodes.push(node);
+			next.targetGraph.revision += 1;
+			return next;
+		}
+		case "target_edge_recorded": {
+			const edge = { ...event.edge, evidenceIds: [...event.edge.evidenceIds] };
+			const index = next.targetGraph.edges.findIndex((item) => item.id === edge.id);
+			if (index >= 0) next.targetGraph.edges[index] = edge;
+			else next.targetGraph.edges.push(edge);
+			next.targetGraph.revision += 1;
+			return next;
+		}
+		case "competition_state_changed":
+			next.competition = structuredClone(event.competition);
 			return next;
 		case "hypothesis_added":
 			if (!next.hypotheses.includes(event.hypothesis)) next.hypotheses.push(event.hypothesis);
@@ -162,6 +190,13 @@ export function applySecurityEvent(state: SecurityState, event: SecurityEvent): 
 				candidates: event.decision.candidates.map((candidate) => ({ ...candidate })),
 			});
 			return next;
+		case "action_recorded": {
+			const action = { ...event.action };
+			const index = next.actions.findIndex((item) => item.id === action.id);
+			if (index >= 0) next.actions[index] = action;
+			else next.actions.push(action);
+			return next;
+		}
 		case "decision_completed": {
 			const decision = next.decisions.find((item) => item.id === event.decisionId);
 			if (decision) {
@@ -204,6 +239,9 @@ export function replaySecurityState(store: SecuritySessionStore): SecurityState 
 		if (!entry.data || typeof entry.data !== "object") continue;
 		state = applySecurityEvent(state, entry.data as SecurityEvent);
 	}
+	state.actions = state.actions.map((action) =>
+		action.status === "started" ? { ...action, status: "unknown", verificationRequired: true } : action,
+	);
 	return state;
 }
 

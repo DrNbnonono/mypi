@@ -72,6 +72,64 @@ function decision(id: string, tool: string): SecurityDecision {
 	};
 }
 describe("decision execution and re-planning signals", () => {
+	it("creates and executes an atomic intent without a caller-supplied decision id", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "pi-secagent-atomic-"));
+		tempDirectories.push(directory);
+		const fixture = join(directory, "sample.bin");
+		await writeFile(fixture, Buffer.from("ELF\0fixture", "utf8"));
+		const runtime = new SecAgentRuntime(new MemoryStore());
+		const result = await new SecurityExecutionGateway(runtime).execute(
+			{
+				tool: "file",
+				input: { path: fixture },
+				intent: {
+					goal: "identify the fixture",
+					rationale: "file type is the safest first observation",
+					expectedResult: "an ELF identification",
+				},
+				idempotencyKey: "call-atomic-1",
+			},
+			{ cwd: directory, executor: new FakeExecutor() },
+		);
+		expect(result.ok).toBe(true);
+		expect(result.execution?.argvHash).toMatch(/^[0-9a-f]{64}$/);
+		const snapshot = runtime.snapshot();
+		expect(snapshot.state.decisions).toHaveLength(1);
+		expect(snapshot.state.decisions[0]?.resultStatus).toBe("succeeded");
+		expect(snapshot.state.actions[0]).toMatchObject({
+			idempotencyKey: "call-atomic-1",
+			status: "succeeded",
+			toolName: "file",
+		});
+		expect(runtime.readAudit()[0]).toMatchObject({
+			requestedInputHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+			normalizedInputHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+			argvHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+			command: "file",
+			resultSource: "local",
+		});
+	});
+
+	it("rejects retries with the same idempotency key", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "pi-secagent-idempotency-"));
+		tempDirectories.push(directory);
+		const fixture = join(directory, "sample.bin");
+		await writeFile(fixture, Buffer.from("fixture", "utf8"));
+		const runtime = new SecAgentRuntime(new MemoryStore());
+		const selected = decision("d-idempotent", "file");
+		runtime.append({ type: "decision_recorded", decision: selected, createdAt: selected.createdAt });
+		const gateway = new SecurityExecutionGateway(runtime);
+		const request = {
+			tool: "file",
+			decisionId: selected.id,
+			input: { path: fixture },
+			idempotencyKey: "same-call",
+		} as const;
+		expect((await gateway.execute(request, { cwd: directory, executor: new FakeExecutor() })).ok).toBe(true);
+		const retry = await gateway.execute(request, { cwd: directory, executor: new FakeExecutor() });
+		expect(retry.ok).toBe(false);
+		expect(retry.diagnostic?.message).toMatch(/already exists/);
+	});
 	it("completes a successful gateway decision and links hash-backed provenance", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "pi-secagent-gateway-"));
 		tempDirectories.push(directory);
@@ -109,6 +167,25 @@ describe("decision execution and re-planning signals", () => {
 	});
 	it("executes an out-of-scope autonomous action with a high-risk audit warning", async () => {
 		const runtime = new SecAgentRuntime(new MemoryStore());
+		runtime.append({
+			type: "task_started",
+			task: {
+				id: "autonomous-task",
+				goal: "controlled fixture",
+				scenario: "penetration-test",
+				assets: [],
+				constraints: [],
+				successCriteria: [],
+				declaredAuthorization: ["controlled fixture"],
+				pendingConfirmations: [],
+				createdAt: "2026-08-30T00:00:00Z",
+			},
+			createdAt: "2026-08-30T00:00:00Z",
+		});
+		runtime.command({
+			type: "set_scope",
+			scope: { targets: [{ id: "scope", kind: "ipv4", value: "127.0.0.1" }], authorizationSource: "test" },
+		});
 		runtime.command({ type: "set_isolation", isolation: { status: "sandbox", source: "pi-sandbox" } });
 		runtime.command({
 			type: "authorize_autonomous",
@@ -135,6 +212,57 @@ describe("decision execution and re-planning signals", () => {
 			scope: { allowed: false },
 		});
 		expect(runtime.readAudit().at(-1)?.warnings?.length).toBeGreaterThan(0);
+	});
+	it("rejects concurrent execution of the same decision", async () => {
+		const runtime = new SecAgentRuntime(new MemoryStore());
+		runtime.command({
+			type: "set_scope",
+			scope: { targets: [{ id: "scope", kind: "ipv4", value: "127.0.0.1" }], authorizationSource: "test" },
+		});
+		const selected = decision("d-concurrent", "nmap");
+		runtime.append({ type: "decision_recorded", decision: selected, createdAt: selected.createdAt });
+		let releaseApproval: ((approved: boolean) => void) | undefined;
+		const approval = new Promise<boolean>((resolve) => {
+			releaseApproval = resolve;
+		});
+		const gateway = new SecurityExecutionGateway(runtime);
+		const first = gateway.execute(
+			{ tool: "nmap", decisionId: selected.id, input: { target: "127.0.0.1" } },
+			{ cwd: process.cwd(), executor: new FakeExecutor(), confirm: () => approval },
+		);
+		await Promise.resolve();
+		const second = await gateway.execute(
+			{ tool: "nmap", decisionId: selected.id, input: { target: "127.0.0.1" } },
+			{ cwd: process.cwd(), executor: new FakeExecutor() },
+		);
+		expect(second.ok).toBe(false);
+		expect(second.diagnostic?.message).toMatch(/already executing/);
+		releaseApproval?.(true);
+		expect((await first).ok).toBe(true);
+		expect(runtime.snapshot().state.decisions[0]?.resultStatus).toBe("succeeded");
+	});
+	it("converts adapter/approval exceptions into a failed decision and audit", async () => {
+		const runtime = new SecAgentRuntime(new MemoryStore());
+		runtime.command({
+			type: "set_scope",
+			scope: { targets: [{ id: "scope", kind: "ipv4", value: "127.0.0.1" }], authorizationSource: "test" },
+		});
+		const selected = decision("d-throw", "nmap");
+		runtime.append({ type: "decision_recorded", decision: selected, createdAt: selected.createdAt });
+		const result = await new SecurityExecutionGateway(runtime).execute(
+			{ tool: "nmap", decisionId: selected.id, input: { target: "127.0.0.1" } },
+			{
+				cwd: process.cwd(),
+				executor: new FakeExecutor(),
+				confirm: async () => {
+					throw new Error("approval bridge down");
+				},
+			},
+		);
+		expect(result.ok).toBe(false);
+		expect(result.diagnostic?.message).toMatch(/approval bridge down/);
+		expect(runtime.snapshot().state.decisions[0]?.resultStatus).toBe("failed");
+		expect(runtime.readAudit().at(-1)).toMatchObject({ blocked: false, isError: true });
 	});
 	it("blocks protected credential paths in the execution gateway", async () => {
 		const runtime = new SecAgentRuntime(new MemoryStore());

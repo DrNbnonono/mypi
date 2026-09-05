@@ -66,6 +66,12 @@ describe("standard security tool adapters", () => {
 			{ cwd: process.cwd(), executor },
 		);
 		expect(executed?.ok).toBe(true);
+		expect(executed?.execution).toMatchObject({
+			command: "nmap",
+			resultSource: "remote-target",
+			normalizedInputHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+			argvHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+		});
 		expect(executor.calls.map((call) => call.command)).toEqual(["nmap", "nmap", "nmap"]);
 		expect(executor.calls[2]?.args).toEqual(["-Pn", "-sV", "-p", "80,443", "-T3", "127.0.0.1"]);
 		expect((executed?.output as { targets: string[] }).targets).toEqual(["127.0.0.1"]);
@@ -84,6 +90,38 @@ describe("standard security tool adapters", () => {
 		expect((executed?.output as { statusCode: number }).statusCode).toBe(200);
 		expect(executor.calls[1]?.command).toBe("curl");
 		expect(executor.calls[1]?.args).not.toContain("|");
+	});
+
+	it("parses a raw curl command string into structured method, headers, and body", async () => {
+		const adapter = getSecurityToolAdapter("curl");
+		const executor = new FakeExecutor();
+		executor.set("curl", result('{"ok":true}\n__PI_CURL_STATUS__:200'));
+		const command =
+			`curl -sS -X POST -H 'Content-Type: application/json' ` +
+			`-d '{"email":"\\" or 1=1--","password":"x"}' http://127.0.0.1:3000/rest/user/login`;
+		const executed = await adapter?.execute({ command, timeoutMs: 7000 }, { cwd: process.cwd(), executor });
+		expect(executed?.ok).toBe(true);
+		expect((executed?.output as { statusCode: number }).statusCode).toBe(200);
+		const args = executor.calls[1]?.args ?? [];
+		expect(args).toContain("--request");
+		expect(args[args.indexOf("--request") + 1]).toBe("POST");
+		expect(args).toContain("--header");
+		expect(args[args.indexOf("--header") + 1]).toBe("Content-Type: application/json");
+		expect(args).toContain("--data");
+		expect(args[args.indexOf("--data") + 1]).toContain("1=1--");
+		expect(args[args.length - 1]).toBe("http://127.0.0.1:3000/rest/user/login");
+	});
+
+	it("fails loudly on unsupported curl flags instead of silently dropping them", async () => {
+		const adapter = getSecurityToolAdapter("curl");
+		const executor = new FakeExecutor();
+		executor.set("curl", result("__PI_CURL_STATUS__:200"));
+		const executed = await adapter?.execute(
+			{ command: "curl --cookie jar=1 http://127.0.0.1:3000/" },
+			{ cwd: process.cwd(), executor },
+		);
+		expect(executed?.ok).toBe(false);
+		expect(executed?.diagnostic?.message).toMatch(/unsupported curl flag '--cookie'/);
 	});
 
 	it("reports missing tools and command timeouts structurally", async () => {

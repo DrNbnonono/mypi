@@ -108,15 +108,28 @@ export function markRuntimePrepared({ repoRoot = defaultRepoRoot, webRoot = pack
   return { fingerprint };
 }
 
+function resolveNpmCommand() {
+	// Node >= 18.20/20.12 refuses to spawn .cmd/.bat shims directly (EINVAL on
+	// Windows), so prefer invoking npm's JS entry through the current runtime.
+	const npmCli = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+	if (existsSync(npmCli)) return { command: process.execPath, args: [npmCli], shell: false };
+	return {
+		command: process.platform === "win32" ? "npm.cmd" : "npm",
+		args: [],
+		shell: process.platform === "win32",
+	};
+}
+
 function runWorkspaceBuild(repoRoot, packageName, env) {
-  const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-  const result = spawnSync(
-    npmCommand,
-    ["run", "build", `--workspace=${packageName}`],
-    { cwd: repoRoot, env, stdio: "inherit" },
-  );
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`${packageName} build failed with exit code ${result.status ?? "unknown"}`);
+	const npm = resolveNpmCommand();
+	const result = spawnSync(npm.command, [...npm.args, "run", "build", `--workspace=${packageName}`], {
+		cwd: repoRoot,
+		env,
+		stdio: "inherit",
+		shell: npm.shell,
+	});
+	if (result.error) throw result.error;
+	if (result.status !== 0) throw new Error(`${packageName} build failed with exit code ${result.status ?? "unknown"}`);
 }
 
 export function prepareRuntime({

@@ -85,11 +85,25 @@ export function isTargetInScope(candidate: string, target: ScopeTarget): boolean
 	return candidateHost === scopeValue;
 }
 
-function extractTextTargets(text: string): string[] {
+function extractTextTargets(text: string, options: { urlsAndIpsOnly?: boolean } = {}): string[] {
 	const values = new Set<string>();
-	for (const match of text.matchAll(URL_PATTERN)) values.add(stripTrailingPunctuation(match[0]));
-	for (const match of text.matchAll(IPV4_PATTERN)) values.add(stripTrailingPunctuation(match[0]));
-	for (const match of text.matchAll(DOMAIN_PATTERN)) values.add(stripTrailingPunctuation(match[0]));
+	let rest = text;
+	for (const match of text.matchAll(URL_PATTERN)) {
+		// The URL itself is the scope candidate; its hostname is what gets
+		// checked. Scrub the matched region so DOMAIN_PATTERN does not also
+		// lift phantom hosts out of URL paths (e.g. "19px.png", "security.txt").
+		values.add(stripTrailingPunctuation(match[0]));
+		rest = rest.replace(match[0], " ");
+	}
+	for (const match of rest.matchAll(IPV4_PATTERN)) values.add(stripTrailingPunctuation(match[0]));
+	if (options.urlsAndIpsOnly) return [...values];
+	for (const match of rest.matchAll(DOMAIN_PATTERN)) {
+		// Skip path segments: "docs/notes.md" and URL-adjacent file names are
+		// not hosts. A real domain never appears directly after a "/".
+		const previous = match.index !== undefined && match.index > 0 ? rest[match.index - 1] : undefined;
+		if (previous === "/") continue;
+		values.add(stripTrailingPunctuation(match[0]));
+	}
 	return [...values];
 }
 
@@ -119,7 +133,10 @@ export function assessToolScope(
 	let required = resolution.requiresScope;
 	let targets: string[] = [];
 	if (toolName === "bash") {
-		if (required) targets = extractTextTargets(typeof input.command === "string" ? input.command : "");
+		// Shell free text mixes URLs with file names; only explicit URL and IP
+		// candidates are scope-checked so "cat notes.md" is not a host.
+		if (required)
+			targets = extractTextTargets(typeof input.command === "string" ? input.command : "", { urlsAndIpsOnly: true });
 	} else if (toolName === "mcp") {
 		targets = extractMcpNetworkTargets(input);
 		required = targets.length > 0;

@@ -1,6 +1,7 @@
 import type { RiskLevel, SecurityToolMetadata, ToolResolution } from "../core/types.ts";
 import { resolveMcpProxyCall } from "../integrations/mcp-policy.ts";
 import type { SecurityToolAdapter } from "./adapter.ts";
+import { createBrowserAdapter } from "./browser.ts";
 import { SECURITY_TOOL_CATALOG } from "./catalog.ts";
 import { createCurlAdapter } from "./curl.ts";
 import { createFileAdapter, createStringsAdapter } from "./file.ts";
@@ -48,34 +49,49 @@ export function getSecurityToolAdapter(name: string): SecurityToolAdapter | unde
 	const existing = adapterByName.get(metadata.name);
 	if (existing) return existing;
 	const adapter =
-		metadata.name === "curl"
-			? createCurlAdapter(metadata)
-			: metadata.name === "nmap"
-				? createNmapAdapter(metadata)
-				: metadata.name === "file"
-					? createFileAdapter(metadata)
-					: metadata.name === "strings"
-						? createStringsAdapter(metadata)
-						: metadata.name === "readelf"
-							? createStaticAnalysisAdapter(metadata, "readelf")
-							: metadata.name === "objdump"
-								? createStaticAnalysisAdapter(metadata, "objdump")
-								: metadata.name === "binwalk"
-									? createForensicsAdapter(metadata, "binwalk")
-									: metadata.name === "exiftool"
-										? createForensicsAdapter(metadata, "exiftool")
-										: metadata.name === "httpx"
-											? createWebAdapter(metadata, "httpx")
-											: metadata.name === "ffuf"
-												? createWebAdapter(metadata, "ffuf")
-												: metadata.name === "nuclei"
-													? createWebAdapter(metadata, "nuclei")
-													: undefined;
+		metadata.name === "browser"
+			? createBrowserAdapter(metadata)
+			: metadata.name === "curl"
+				? createCurlAdapter(metadata)
+				: metadata.name === "nmap"
+					? createNmapAdapter(metadata)
+					: metadata.name === "file"
+						? createFileAdapter(metadata)
+						: metadata.name === "strings"
+							? createStringsAdapter(metadata)
+							: metadata.name === "readelf"
+								? createStaticAnalysisAdapter(metadata, "readelf")
+								: metadata.name === "objdump"
+									? createStaticAnalysisAdapter(metadata, "objdump")
+									: metadata.name === "binwalk"
+										? createForensicsAdapter(metadata, "binwalk")
+										: metadata.name === "exiftool"
+											? createForensicsAdapter(metadata, "exiftool")
+											: metadata.name === "httpx"
+												? createWebAdapter(metadata, "httpx")
+												: metadata.name === "ffuf"
+													? createWebAdapter(metadata, "ffuf")
+													: metadata.name === "nuclei"
+														? createWebAdapter(metadata, "nuclei")
+														: undefined;
 	if (adapter) adapterByName.set(metadata.name, adapter);
 	return adapter;
 }
 export function listSecurityToolAdapters(): SecurityToolAdapter[] {
-	return ["nmap", "curl", "file", "strings", "readelf", "objdump", "binwalk", "exiftool", "httpx", "ffuf", "nuclei"]
+	return [
+		"nmap",
+		"curl",
+		"browser",
+		"file",
+		"strings",
+		"readelf",
+		"objdump",
+		"binwalk",
+		"exiftool",
+		"httpx",
+		"ffuf",
+		"nuclei",
+	]
 		.map((name) => getSecurityToolAdapter(name))
 		.filter((adapter): adapter is SecurityToolAdapter => Boolean(adapter));
 }

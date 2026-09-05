@@ -2,7 +2,10 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 
-const ignoredDirectories = new Set([".git", "coverage", "dist", "node_modules"]);
+// Next.js writes generated route validator/types into .next. Those files are
+// build output and may intentionally contain relative .js specifiers; this
+// check applies only to repository-authored TypeScript sources.
+const ignoredDirectories = new Set([".git", ".next", "coverage", "dist", "node_modules"]);
 const files = [];
 
 function collectTypescriptFiles(directory) {

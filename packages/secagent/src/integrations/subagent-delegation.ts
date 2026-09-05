@@ -115,6 +115,8 @@ const BLOCKED_CHILD_TOOLS = [
 	"security_plan",
 	"security_delegate",
 	"security_delegate_run",
+	"security_competition",
+	"security_target_graph",
 ];
 
 function delegationTask(recommendation: AgentDispatchRecommendation): string {

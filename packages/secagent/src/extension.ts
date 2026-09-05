@@ -36,6 +36,7 @@ const SCENARIOS = [
 	"vulnerability-research",
 	"web-security",
 	"reverse-engineering",
+	"ctf",
 ] as const;
 const CATEGORIES = [
 	"internal",
@@ -83,6 +84,7 @@ const IntakeParams = Type.Object({
 				path: Type.Optional(Type.String()),
 				mimeType: Type.Optional(Type.String()),
 				content: Type.Optional(Type.String()),
+				contentBase64: Type.Optional(Type.String()),
 			}),
 			{ maxItems: 64 },
 		),
@@ -125,8 +127,29 @@ const ReportParams = Type.Object({
 	redact: Type.Optional(Type.Boolean()),
 });
 const ExecuteParams = Type.Object({
-	tool: StringEnum(["nmap", "curl", "file", "strings"] as const),
-	decisionId: Type.String({ minLength: 1 }),
+	tool: StringEnum([
+		"nmap",
+		"curl",
+		"browser",
+		"file",
+		"strings",
+		"readelf",
+		"objdump",
+		"binwalk",
+		"exiftool",
+		"httpx",
+		"ffuf",
+		"nuclei",
+	] as const),
+	decisionId: Type.Optional(Type.String({ minLength: 1 })),
+	intent: Type.Optional(
+		Type.Object({
+			goal: Type.String({ minLength: 1 }),
+			rationale: Type.String({ minLength: 1 }),
+			expectedResult: Type.String({ minLength: 1 }),
+			evidenceIds: Type.Optional(Type.Array(Type.String())),
+		}),
+	),
 	input: Type.Record(Type.String(), Type.Unknown()),
 });
 
@@ -231,9 +254,9 @@ function registerSecAgent(pi: SecAgentExtensionAPI, runtime: SecAgentRuntime): v
 			"Create a structured task specification from bounded security inputs. Input assets do not grant target authorization.",
 		promptSnippet: "security_intake: structure the task and identify pending authorization",
 		parameters: IntakeParams,
-		async execute(_id, params) {
+		async execute(_id, params, _signal, _update, ctx) {
 			try {
-				const task = createSecurityTaskSpec(params);
+				const task = createSecurityTaskSpec(params, { cwd: ctx.cwd });
 				runtime.append({ type: "task_started", task, createdAt: task.createdAt });
 				return {
 					content: [
@@ -450,14 +473,32 @@ function registerSecAgent(pi: SecAgentExtensionAPI, runtime: SecAgentRuntime): v
 		label: "Security Execute",
 		description:
 			"Execute a registered security adapter through decision, scope, policy, isolation, evidence, and audit gates.",
-		promptSnippet: "security_execute: run the selected audited adapter for an existing decision",
+		promptSnippet: "security_execute: atomically declare and run an audited action, or execute an existing decision",
 		parameters: ExecuteParams,
-		async execute(_id, params, signal, _update, ctx) {
+		async execute(id, params, signal, _update, ctx) {
+			if ((params.decisionId === undefined) === (params.intent === undefined)) {
+				const result: SecurityToolExecutionResult = {
+					ok: false,
+					diagnostic: {
+						code: "precondition",
+						message: "Provide exactly one of decisionId or intent",
+					},
+					evidence: [],
+				};
+				return {
+					content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+					details: result,
+					isError: true,
+				};
+			}
 			const result = await gateway.execute(
-				{ tool: params.tool, decisionId: params.decisionId, input: params.input },
+				params.decisionId
+					? { tool: params.tool, decisionId: params.decisionId, input: params.input, idempotencyKey: id }
+					: { tool: params.tool, intent: params.intent!, input: params.input, idempotencyKey: id },
 				{
 					cwd: ctx.cwd,
 					signal,
+					browser: runtime.browserService,
 					...(ctx.hasUI ? { confirm: (title, message) => ctx.ui.confirm(title, message) } : {}),
 				},
 			);

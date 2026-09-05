@@ -228,6 +228,22 @@ export function SecAgentWorkspace({
 		}
 	}, [sessionId, t]);
 
+	const refreshSnapshot = useCallback(async (signal: AbortSignal) => {
+		if (!sessionId) return;
+		const response = await fetch(`/api/agent/${encodeURIComponent(sessionId)}/profile`, {
+			cache: "no-store",
+			signal,
+		});
+		const result = await readResponse(response, t);
+		if (signal.aborted) return;
+		if (result.agentMode === "coding") {
+			setSnapshot(null);
+			return;
+		}
+		if (!isSecurityProfileSnapshot(result.value)) throw new Error(t("sec.error.invalidSnapshot"));
+		setSnapshot(result.value);
+	}, [sessionId, t]);
+
 	const command = useCallback(async (body: Record<string, unknown>): Promise<unknown> => {
 		if (!sessionId) throw new Error(t("sec.error.sessionNotStarted"));
 		setBusy(true);
@@ -267,7 +283,16 @@ export function SecAgentWorkspace({
 	useEffect(() => {
 		if (!sessionId || loadState !== "ready") return;
 		const source = new EventSource(`/api/agent/${encodeURIComponent(sessionId)}/events`);
-		source.onopen = () => setConnectionError(null);
+		let refreshController: AbortController | undefined;
+		source.onopen = () => {
+			setConnectionError(null);
+			refreshController?.abort();
+			const controller = new AbortController();
+			refreshController = controller;
+			void refreshSnapshot(controller.signal).catch((cause) => {
+				if (!controller.signal.aborted) setConnectionError(errorText(cause));
+			});
+		};
 		source.onmessage = (message) => {
 			try {
 				const event = JSON.parse(message.data) as Record<string, unknown>;

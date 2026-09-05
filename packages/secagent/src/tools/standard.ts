@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
+import { redactSecurityValue } from "../core/audit.ts";
 import type { EvidenceKind, SecurityToolMetadata } from "../core/types.ts";
 import type {
 	SecurityToolAdapter,
@@ -15,6 +16,23 @@ import { defaultSecurityToolExecutor } from "./executor.ts";
 
 export const DEFAULT_TOOL_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_NORMALIZED_OUTPUT = 256 * 1024;
+
+function canonicalize(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(canonicalize);
+	if (!value || typeof value !== "object") return value;
+	return Object.fromEntries(
+		Object.entries(value as Record<string, unknown>)
+			.filter(([, item]) => item !== undefined)
+			.sort(([left], [right]) => left.localeCompare(right))
+			.map(([key, item]) => [key, canonicalize(item)]),
+	);
+}
+
+export function hashSecurityValue(value: unknown): string {
+	return createHash("sha256")
+		.update(JSON.stringify(canonicalize(value)))
+		.digest("hex");
+}
 
 export function commandExecutor(context: SecurityToolExecutionContext): SecurityToolExecutor {
 	return context.executor ?? defaultSecurityToolExecutor;
@@ -76,7 +94,11 @@ export function commandResultOutput(
 		stderr,
 		stdoutLines: stdout.split(/\r?\n/).filter(Boolean),
 		stderrLines: stderr.split(/\r?\n/).filter(Boolean),
-		truncated: result.stdout.length > stdout.length || result.stderr.length > stderr.length,
+		truncated:
+			result.stdoutTruncated === true ||
+			result.stderrTruncated === true ||
+			result.stdout.length > stdout.length ||
+			result.stderr.length > stderr.length,
 	};
 }
 
@@ -176,10 +198,22 @@ export async function runStandardTool(options: {
 			timeoutMs,
 		});
 		const output = commandResultOutput(options.command, options.args, options.targets, result, availability.version);
+		const redactedArgs = redactSecurityValue([...options.args]);
+		const execution = {
+			command: options.command,
+			args: redactedArgs,
+			normalizedInputHash: hashSecurityValue(options.input),
+			argvHash: hashSecurityValue([options.command, ...redactedArgs]),
+			cwd: options.context.cwd,
+			version: availability.version,
+			resultSource:
+				options.metadata.scopeMode === "network-target" ? ("remote-target" as const) : ("local" as const),
+		};
 		if (result.timedOut)
 			return {
 				ok: false,
 				output,
+				execution,
 				diagnostic: {
 					code: "timeout",
 					message: `${options.command} timed out after ${timeoutMs}ms`,
@@ -206,6 +240,7 @@ export async function runStandardTool(options: {
 					targetRefs: options.evidence?.targetRefs ?? [...options.targets],
 				},
 			],
+			execution,
 		};
 	} catch (error) {
 		return diagnosticResult({

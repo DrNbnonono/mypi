@@ -82,6 +82,7 @@ export interface OperationalMemory {
 	ideas: string[];
 	constraints: string[];
 	failures: string[];
+	targets: string[];
 }
 
 export function buildOperationalMemory(state: SecurityState): OperationalMemory {
@@ -100,6 +101,10 @@ export function buildOperationalMemory(state: SecurityState): OperationalMemory 
 	return {
 		facts,
 		ideas,
+		targets: state.targetGraph.nodes
+			.filter((node) => node.status === "verified" || node.status === "hypothesis")
+			.slice(-16)
+			.map((node) => `${node.id}:${node.kind}:${node.status}:${node.label}`),
 		constraints: [
 			...(state.task?.constraints ?? []),
 			...state.scope.targets.map((target) => `scope:${target.value}`),

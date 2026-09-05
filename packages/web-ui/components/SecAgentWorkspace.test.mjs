@@ -48,7 +48,7 @@ test("handles SSE profile_state updates, reconnect errors, and cleanup", () => {
   assert.match(componentSource, /new EventSource\(`\/api\/agent\/\$\{encodeURIComponent\(sessionId\)\}\/events`\)/);
   assert.match(componentSource, /event\.type === "profile_state"/);
   assert.match(componentSource, /source\.onerror = \(\) => setConnectionError/);
-  assert.match(componentSource, /return \(\) => source\.close\(\)/);
+	assert.match(componentSource, /source\.close\(\)/);
   assert.match(componentSource, /const controller = new AbortController\(\)/);
   assert.match(componentSource, /return \(\) => controller\.abort\(\)/);
 });

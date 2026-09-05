@@ -1,3 +1,4 @@
+import type { SecurityBrowserService } from "../browser/service.ts";
 import type { EvidenceKind, SecurityToolMetadata } from "../core/types.ts";
 import { getSecurityToolMetadata } from "./registry.ts";
 
@@ -5,6 +6,7 @@ export interface SecurityToolExecutionContext {
 	cwd: string;
 	signal?: AbortSignal;
 	executor?: SecurityToolExecutor;
+	browser?: SecurityBrowserService;
 }
 
 export interface SecurityToolCommandResult {
@@ -14,6 +16,8 @@ export interface SecurityToolCommandResult {
 	signal?: string;
 	timedOut: boolean;
 	durationMs: number;
+	stdoutTruncated?: boolean;
+	stderrTruncated?: boolean;
 }
 
 export interface SecurityToolExecutor {
@@ -46,6 +50,15 @@ export interface SecurityToolExecutionResult {
 	output?: unknown;
 	diagnostic?: { code: SecurityToolDiagnosticCode; message: string; command?: string; exitCode?: number | null };
 	evidence: NormalizedSecurityEvidence[];
+	execution?: {
+		command: string;
+		args: string[];
+		normalizedInputHash: string;
+		argvHash: string;
+		cwd: string;
+		version?: string;
+		resultSource: "local" | "remote-target";
+	};
 }
 
 export interface SecurityToolAdapter {

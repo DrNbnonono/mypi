@@ -26,12 +26,12 @@ export function evaluateScopeGuard(
 ): ScopeGuardDecision {
 	if (toolName.startsWith("security_")) return { block: false, warn: false };
 	const assessment = assessToolScope(toolName, input, state.scope);
-	if (toolName === "bash") {
+	if (toolName === "bash" && state.policyMode === "strict") {
 		return {
 			block: true,
 			warn: false,
 			reason:
-				"direct shell execution is disabled in Sec mode; select a decision and use security_execute with a registered adapter",
+				"direct shell execution is disabled in strict Sec mode; select a decision and use security_execute with a registered adapter",
 			assessment,
 		};
 	}
@@ -45,7 +45,7 @@ export function evaluateScopeGuard(
 export function createSecAgentScopeGuardExtension(runtime: SecAgentRuntime): SecAgentInlineExtension {
 	return defineSecAgentExtension("secagent-scope-guard", (pi) => {
 		pi.on("before_agent_start", async (event) => ({
-			systemPrompt: `${event.systemPrompt}\n\nSecAgent scope policy: strict and competition modes block targets outside security_scope. Autonomous mode requires recorded controlled isolation and one-time authorization; it may continue outside scope only with a high-risk audit warning. Protected credential paths, OS/container isolation, and audit remain mandatory.`,
+			systemPrompt: `${event.systemPrompt}\n\nSecAgent scope policy: strict and competition modes block targets outside security_scope. Direct bash is disabled only in strict mode; in competition and autonomous modes bash remains subject to scope, protected-path, and risk policy (P3 commands still require approval in competition). Autonomous mode requires recorded controlled isolation and one-time authorization; it may continue outside scope only with a high-risk audit warning. Protected credential paths, OS/container isolation, and audit remain mandatory.`,
 		}));
 		pi.on("tool_call", async (event, ctx) => {
 			const input = event.input as Record<string, unknown>;

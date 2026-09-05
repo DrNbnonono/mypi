@@ -22,6 +22,24 @@ describe("scope and policy", () => {
 		expect(assessToolScope("bash", { command: "nmap 10.20.30.17" }, scope).allowed).toBe(true);
 	});
 
+	it("does not lift phantom hosts out of URL paths or file names", () => {
+		const loopback: SecurityScope = { targets: [{ id: "lo", kind: "ipv4", value: "127.0.0.1" }] };
+		for (const command of [
+			"curl -s http://127.0.0.1:3000/assets/public/images/padding/19px.png",
+			"curl -s http://127.0.0.1:3000/.well-known/security.txt",
+			"curl -s http://127.0.0.1:3000/ftp/00.md && cat notes.md",
+		]) {
+			const assessment = assessToolScope("bash", { command }, loopback);
+			expect(assessment.allowed, command).toBe(true);
+			expect(
+				assessment.targets.filter((target) => !target.includes("127.0.0.1")),
+				command,
+			).toEqual([]);
+		}
+		const curlInput = { target: "http://127.0.0.1:3000/rest/admin/application-configuration" };
+		expect(assessToolScope("curl", curlInput, loopback).allowed).toBe(true);
+	});
+
 	it("implements strict, competition, and autonomous confirmation behavior", () => {
 		expect(decidePermission("strict", "P2")).toBe("confirm");
 		expect(decidePermission("competition", "P2")).toBe("allow");
@@ -32,8 +50,20 @@ describe("scope and policy", () => {
 	it("requires isolation and authorization before autonomous mode", () => {
 		const state = createInitialSecurityState();
 		expect(canEnableAutonomous(state).allowed).toBe(false);
+		state.task = {
+			id: "task-1",
+			goal: "controlled lab",
+			scenario: "penetration-test",
+			assets: [],
+			constraints: [],
+			successCriteria: [],
+			declaredAuthorization: ["lab"],
+			pendingConfirmations: [],
+			createdAt: "2026-08-30T00:00:00Z",
+		};
 		state.isolation = { status: "sandbox", source: "pi-sandbox" };
 		expect(canEnableAutonomous(state).allowed).toBe(false);
+		state.scope = { targets: [{ id: "lab", kind: "ipv4", value: "127.0.0.1" }] };
 		state.autonomousAuthorization = {
 			operator: "tester",
 			reason: "lab",
@@ -41,6 +71,7 @@ describe("scope and policy", () => {
 			confirmedAt: "2026-08-30T00:00:00Z",
 		};
 		expect(canEnableAutonomous(state).allowed).toBe(true);
+		expect(canEnableAutonomous(state, { runtimePackagesReady: false })).toMatchObject({ allowed: false });
 		state.isolation = { status: "external", source: "organizer-lab" };
 		expect(canEnableAutonomous(state)).toMatchObject({ allowed: false });
 	});

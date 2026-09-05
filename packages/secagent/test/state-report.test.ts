@@ -54,7 +54,10 @@ describe("state replay and reports", () => {
 			createdAt: "2026-08-30T00:01:00Z",
 		});
 		expect(state.decisions[0]?.actualResult).toBe("metadata collected");
-		expect(buildSecurityReportMarkdown(state, [])).toMatch(/Decision Trace/);
+		const report = buildSecurityReportMarkdown(state, []);
+		expect(report).toMatch(/Decision Trace/);
+		expect(report).toMatch(/Target and Attack Graph/);
+		expect(report).toMatch(/Action Journal/);
 	});
 
 	it("redacts secrets in Markdown and JSON exports", () => {

@@ -29,12 +29,22 @@ describe("scope guard policy", () => {
 		expect(decision.warn).toBe(false);
 	});
 
-	it("blocks direct shell execution so it cannot bypass registered adapters", () => {
+	it("blocks direct shell execution in strict mode so it cannot bypass registered adapters", () => {
 		const state = createInitialSecurityState();
-		state.policyMode = "autonomous";
+		state.policyMode = "strict";
 		const decision = evaluateScopeGuard("bash", { command: "nmap 127.0.0.1" }, state);
 		expect(decision.block).toBe(true);
 		expect(decision.reason).toMatch(/security_execute/);
+	});
+
+	it("lets competition and autonomous modes run bash through scope and risk policy", () => {
+		for (const policyMode of ["competition", "autonomous"] as const) {
+			const state = createInitialSecurityState();
+			state.policyMode = policyMode;
+			state.scope.targets = [{ id: "scope-1", kind: "ipv4", value: "127.0.0.1" }];
+			const decision = evaluateScopeGuard("bash", { command: "curl -s http://127.0.0.1:3000/api/Products" }, state);
+			expect(decision.block).toBe(false);
+		}
 	});
 });
 

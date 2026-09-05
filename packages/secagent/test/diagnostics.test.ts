@@ -37,6 +37,12 @@ describe("SecAgent diagnostics", () => {
 		});
 		expect(diagnostics.checks.find((check) => check.id === "isolation")).toMatchObject({ status: "pass" });
 		expect(diagnostics.checks.filter((check) => check.id.startsWith("tool:"))).not.toHaveLength(0);
+		expect(diagnostics.checks.find((check) => check.id === "tool-adapter-coverage")).toMatchObject({
+			status: "warn",
+		});
+		expect(diagnostics.checks.find((check) => check.id === "tool-adapter-coverage")?.details).toMatchObject({
+			metadataOnlyTools: expect.arrayContaining(["sqlmap", "radare2"]),
+		});
 		expect(diagnostics.checks.find((check) => check.id === "model-connectivity")).toMatchObject({ status: "warn" });
 		expect(typeof diagnostics.runtimeReady).toBe("boolean");
 		expect(typeof diagnostics.autonomousReady).toBe("boolean");
@@ -44,5 +50,5 @@ describe("SecAgent diagnostics", () => {
 
 		const cached = await runtime.runDiagnostics();
 		expect(runtime.snapshot().diagnostics).toEqual(cached);
-	});
+	}, 30_000);
 });

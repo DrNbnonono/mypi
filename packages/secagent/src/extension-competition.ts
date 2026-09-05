@@ -6,6 +6,12 @@ import { assessBudget, normalizeBudgetLimits } from "./core/budget.ts";
 import { createEvidenceEdge, createHypothesis, graphIntegrityErrors } from "./core/evidence-graph.ts";
 import { assessTermination, buildOperationalMemory, observeSecurityState } from "./core/observer.ts";
 import { assessReplanNeed, createReplanRecord, rankCandidates } from "./core/planner.ts";
+import {
+	compileTargetContext,
+	createTargetEdge,
+	createTargetNode,
+	targetGraphIntegrityErrors,
+} from "./core/target-graph.ts";
 import type {
 	CandidateActionInput,
 	CtfChallengeKind,
@@ -15,6 +21,9 @@ import type {
 	SecurityEvidence,
 	SecurityFinding,
 	SecurityState,
+	SecurityTargetEdgeKind,
+	SecurityTargetNodeKind,
+	SecurityTargetStatus,
 } from "./core/types.ts";
 import { verifiedFindingGate, verifyHypothesis } from "./core/verifier.ts";
 import { capabilitiesForCtf, createCtfChallengeProfile } from "./ctf/capabilities.ts";
@@ -78,6 +87,59 @@ const DelegateParams = Type.Object({
 	objective: Type.Optional(Type.String()),
 	parentDecisionId: Type.Optional(Type.String()),
 });
+const CompetitionParams = Type.Object({
+	action: StringEnum([
+		"show",
+		"sync",
+		"start_next",
+		"start",
+		"stop",
+		"pause",
+		"resume",
+		"restart",
+		"submit_flag",
+		"view_hint",
+	] as const),
+	code: Type.Optional(Type.String({ minLength: 1 })),
+	flag: Type.Optional(Type.String({ minLength: 1, maxLength: 520 })),
+	evidenceIds: Type.Optional(Type.Array(Type.String(), { maxItems: 64 })),
+});
+const TargetGraphParams = Type.Object({
+	action: StringEnum(["show", "add_node", "add_edge", "set_node_status"] as const),
+	nodeId: Type.Optional(Type.String()),
+	kind: Type.Optional(
+		StringEnum([
+			"host",
+			"service",
+			"application",
+			"identity",
+			"credential",
+			"session",
+			"vulnerability",
+			"artifact",
+		] as const),
+	),
+	label: Type.Optional(Type.String()),
+	status: Type.Optional(StringEnum(["hypothesis", "verified", "rejected", "dead-end"] as const)),
+	confidence: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
+	evidenceIds: Type.Optional(Type.Array(Type.String(), { maxItems: 64 })),
+	scopeTargetId: Type.Optional(Type.String()),
+	secretRef: Type.Optional(Type.String()),
+	fromNodeId: Type.Optional(Type.String()),
+	toNodeId: Type.Optional(Type.String()),
+	edgeKind: Type.Optional(
+		StringEnum([
+			"hosts",
+			"exposes",
+			"authenticates-to",
+			"reachable-from",
+			"depends-on",
+			"vulnerable-to",
+			"derived-from",
+			"pivoted-to",
+		] as const),
+	),
+});
 
 interface TextToolResult<T> {
 	content: Array<{ type: "text"; text: string }>;
@@ -125,6 +187,7 @@ function registerCompetitionTools(pi: SecAgentExtensionAPI, runtime: SecAgentRun
 			"- Run security_observer periodically for sidecar drift/stall detection, compact operational memory, and external completion checks.",
 			"- For authorized CTF tasks, profile the challenge with security_ctf and use the recommended capability family.",
 			"- Use security_delegate for bounded specialist work; specialists may not widen scope, authorization, or budget.",
+			"- Use security_competition for platform lifecycle and flag submission; never infer authorization from discovered targets.",
 		].join("\n")}`,
 	}));
 
@@ -337,6 +400,126 @@ function registerCompetitionTools(pi: SecAgentExtensionAPI, runtime: SecAgentRun
 				return textResult(JSON.stringify(capabilities, null, 2), capabilities);
 			}
 			return textResult(profile ? JSON.stringify(profile, null, 2) : "CTF profile is not set", profile);
+		},
+	});
+
+	pi.registerTool<typeof CompetitionParams, unknown>({
+		name: "security_competition",
+		label: "Security Competition",
+		description:
+			"Operate a configured competition provider with bounded instance lifecycle, hint policy, and deduplicated flag submission.",
+		promptSnippet: "security_competition: synchronize challenges and control isolated attempts",
+		parameters: CompetitionParams,
+		async execute(_id, params) {
+			try {
+				if (params.action === "show") {
+					const competition = runtime.snapshot().state.competition;
+					return textResult(
+						competition ? JSON.stringify(competition, null, 2) : "Competition provider is not active",
+						competition,
+					);
+				}
+				if (params.action === "sync") {
+					const result = await runtime.command({ type: "competition_sync" });
+					return textResult(JSON.stringify(result, null, 2), result);
+				}
+				if (params.action === "start_next") {
+					const result = await runtime.command({ type: "competition_start_next" });
+					return textResult(JSON.stringify(result, null, 2), result);
+				}
+				if (!params.code?.trim()) return errorResult(`Challenge code is required for ${params.action}`);
+				const code = params.code.trim();
+				if (params.action === "submit_flag") {
+					if (!params.flag) return errorResult("Flag is required for submit_flag");
+					const result = await runtime.command({
+						type: "competition_submit_flag",
+						code,
+						flag: params.flag,
+						evidenceIds: params.evidenceIds,
+					});
+					return textResult(JSON.stringify(result, null, 2), result);
+				}
+				const commandType = {
+					start: "competition_start",
+					stop: "competition_stop",
+					pause: "competition_pause",
+					resume: "competition_resume",
+					restart: "competition_restart",
+					view_hint: "competition_view_hint",
+				} as const;
+				const type = commandType[params.action as keyof typeof commandType];
+				if (!type) return errorResult(`Unsupported competition action ${params.action}`);
+				const result = await runtime.command({ type, code });
+				return textResult(JSON.stringify(result, null, 2), result);
+			} catch (error) {
+				return errorResult(
+					`Competition operation failed: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			}
+		},
+	});
+
+	pi.registerTool<typeof TargetGraphParams, unknown>({
+		name: "security_target_graph",
+		label: "Security Target Graph",
+		description:
+			"Maintain an evidence-backed target and attack-path graph. Credential nodes accept only opaque secret:// references.",
+		promptSnippet: "security_target_graph: record verified targets, open paths, and dead ends",
+		parameters: TargetGraphParams,
+		async execute(_id, params) {
+			try {
+				const state = runtime.snapshot().state;
+				if (params.action === "show") {
+					const details = {
+						context: compileTargetContext(state),
+						integrityErrors: targetGraphIntegrityErrors(state),
+					};
+					return textResult(JSON.stringify(details, null, 2), details);
+				}
+				if (params.action === "add_node" && params.kind) {
+					const node = createTargetNode(state, {
+						kind: params.kind as SecurityTargetNodeKind,
+						label: params.label,
+						status: params.status as SecurityTargetStatus | undefined,
+						confidence: params.confidence,
+						evidenceIds: params.evidenceIds,
+						scopeTargetId: params.scopeTargetId,
+						secretRef: params.secretRef,
+					});
+					runtime.append({ type: "target_node_recorded", node, createdAt: node.createdAt });
+					return textResult(`Target node ${node.id} recorded`, node);
+				}
+				if (params.action === "add_edge" && params.fromNodeId && params.toNodeId && params.edgeKind) {
+					const edge = createTargetEdge(state, {
+						fromNodeId: params.fromNodeId,
+						toNodeId: params.toNodeId,
+						kind: params.edgeKind as SecurityTargetEdgeKind,
+						status: params.status as SecurityTargetStatus | undefined,
+						confidence: params.confidence,
+						evidenceIds: params.evidenceIds,
+					});
+					runtime.append({ type: "target_edge_recorded", edge, createdAt: edge.createdAt });
+					return textResult(`Target edge ${edge.id} recorded`, edge);
+				}
+				if (params.action === "set_node_status" && params.nodeId && params.status) {
+					const node = state.targetGraph.nodes.find((item) => item.id === params.nodeId);
+					if (!node) return errorResult(`Target node ${params.nodeId} does not exist`);
+					const updated = {
+						...node,
+						status: params.status as SecurityTargetStatus,
+						confidence: params.confidence ?? node.confidence,
+						evidenceIds: [...new Set([...(node.evidenceIds ?? []), ...(params.evidenceIds ?? [])])],
+						updatedAt: new Date().toISOString(),
+					};
+					runtime.append({ type: "target_node_recorded", node: updated, createdAt: updated.updatedAt });
+					return textResult(`Target node ${updated.id} updated`, updated);
+				}
+				return errorResult(`Required fields missing for ${params.action}`);
+			} catch (error) {
+				return errorResult(
+					`Target graph operation failed: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			}
 		},
 	});
 

@@ -42,6 +42,35 @@ export type ReplanTrigger =
 	| "budget-pressure"
 	| "observer-drift";
 export type ObserverSignalKind = "stalled" | "drift" | "repeated-failure" | "context-pressure" | "termination-risk";
+export type SecurityActionStatus = "planned" | "started" | "succeeded" | "failed" | "unknown" | "cancelled";
+export type SecurityTargetNodeKind =
+	| "host"
+	| "service"
+	| "application"
+	| "identity"
+	| "credential"
+	| "session"
+	| "vulnerability"
+	| "artifact";
+export type SecurityTargetEdgeKind =
+	| "hosts"
+	| "exposes"
+	| "authenticates-to"
+	| "reachable-from"
+	| "depends-on"
+	| "vulnerable-to"
+	| "derived-from"
+	| "pivoted-to";
+export type SecurityTargetStatus = "hypothesis" | "verified" | "rejected" | "dead-end";
+export type CompetitionChallengeStatus = "locked" | "available" | "running" | "completed";
+export type CompetitionAttemptStatus =
+	| "starting"
+	| "running"
+	| "paused"
+	| "completed"
+	| "failed"
+	| "stopped"
+	| "cancelled";
 export type SecurityAgentRole =
 	| "coordinator"
 	| "sec-recon"
@@ -73,6 +102,9 @@ export interface SecurityInputAsset {
 	mimeType?: string;
 	sha256?: string;
 	size?: number;
+	formatValid?: boolean;
+	validationMessages?: string[];
+	detectedTargets?: string[];
 }
 
 export interface SecurityTaskSpec {
@@ -146,6 +178,101 @@ export interface SecurityEvidenceGraph {
 	edges: SecurityEvidenceEdge[];
 	hypotheses: SecurityHypothesisRecord[];
 	verifications: SecurityVerificationRecord[];
+}
+
+export interface SecurityTargetNode {
+	id: string;
+	kind: SecurityTargetNodeKind;
+	label: string;
+	status: SecurityTargetStatus;
+	confidence: number;
+	evidenceIds: string[];
+	scopeTargetId?: string;
+	secretRef?: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface SecurityTargetEdge {
+	id: string;
+	fromNodeId: string;
+	toNodeId: string;
+	kind: SecurityTargetEdgeKind;
+	status: SecurityTargetStatus;
+	confidence: number;
+	evidenceIds: string[];
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface SecurityTargetGraph {
+	nodes: SecurityTargetNode[];
+	edges: SecurityTargetEdge[];
+	revision: number;
+}
+
+export interface CompetitionChallenge {
+	code: string;
+	title: string;
+	status: CompetitionChallengeStatus;
+	level?: number;
+	score?: number;
+	flagCount: number;
+	flagsCaptured: number;
+	metadata?: Record<string, unknown>;
+}
+
+export interface ChallengeInstance {
+	code: string;
+	entrypoints: string[];
+	startedAt: string;
+	providerInstanceId?: string;
+}
+
+export interface FlagSubmissionResult {
+	correct: boolean;
+	message: string;
+	flagCount?: number;
+	flagsCaptured?: number;
+}
+
+export interface ChallengeHint {
+	code: string;
+	content: string;
+	penaltyPercent?: number;
+}
+
+export interface CompetitionAttempt {
+	id: string;
+	challengeCode: string;
+	status: CompetitionAttemptStatus;
+	entrypoints: string[];
+	workspaceRef: string;
+	sessionId?: string;
+	startedAt: string;
+	updatedAt: string;
+	completedAt?: string;
+	failureReason?: string;
+}
+
+export interface CompetitionFlagSubmission {
+	id: string;
+	challengeCode: string;
+	flagHash: string;
+	correct: boolean;
+	evidenceIds: string[];
+	message: string;
+	createdAt: string;
+}
+
+export interface CompetitionRunState {
+	providerId: string;
+	challenges: CompetitionChallenge[];
+	attempts: CompetitionAttempt[];
+	submissions: CompetitionFlagSubmission[];
+	maxConcurrent: number;
+	hintsAllowed: boolean;
+	updatedAt: string;
 }
 
 export interface SecurityFinding {
@@ -243,6 +370,24 @@ export interface SecurityDecision {
 	budgetSnapshot?: SecurityBudgetState;
 }
 
+export interface SecurityActionRecord {
+	id: string;
+	idempotencyKey: string;
+	decisionId: string;
+	toolName: string;
+	status: SecurityActionStatus;
+	requestedInputHash: string;
+	normalizedInputHash?: string;
+	argvHash?: string;
+	command?: string;
+	resultSource?: "local" | "remote-target";
+	startedAt?: string;
+	completedAt?: string;
+	resultSummary?: string;
+	verificationRequired?: boolean;
+	createdAt: string;
+}
+
 export interface SecurityReplanRecord {
 	id: string;
 	trigger: ReplanTrigger;
@@ -281,7 +426,7 @@ export interface CtfChallengeProfile {
 }
 
 export interface SecurityState {
-	version: 5;
+	version: 6;
 	revision: number;
 	task?: SecurityTaskSpec;
 	goal: string;
@@ -292,10 +437,13 @@ export interface SecurityState {
 	scope: SecurityScope;
 	evidence: SecurityEvidence[];
 	evidenceGraph: SecurityEvidenceGraph;
+	targetGraph: SecurityTargetGraph;
+	competition?: CompetitionRunState;
 	hypotheses: string[];
 	rejectedHypotheses: string[];
 	findings: SecurityFinding[];
 	decisions: SecurityDecision[];
+	actions: SecurityActionRecord[];
 	replans: SecurityReplanRecord[];
 	observerSignals: SecurityObserverSignal[];
 	delegations: SecurityDelegationRecord[];
@@ -312,12 +460,16 @@ export type SecurityEvent =
 	| { type: "scope_set"; scope: SecurityScope; createdAt: string }
 	| { type: "evidence_added"; evidence: SecurityEvidence; createdAt: string }
 	| { type: "evidence_linked"; edge: SecurityEvidenceEdge; createdAt: string }
+	| { type: "target_node_recorded"; node: SecurityTargetNode; createdAt: string }
+	| { type: "target_edge_recorded"; edge: SecurityTargetEdge; createdAt: string }
+	| { type: "competition_state_changed"; competition: CompetitionRunState; createdAt: string }
 	| { type: "hypothesis_added"; hypothesis: string; createdAt: string }
 	| { type: "hypothesis_rejected"; hypothesis: string; createdAt: string }
 	| { type: "hypothesis_recorded"; hypothesis: SecurityHypothesisRecord; createdAt: string }
 	| { type: "hypothesis_verified"; verification: SecurityVerificationRecord; createdAt: string }
 	| { type: "finding_added"; finding: SecurityFinding; createdAt: string }
 	| { type: "decision_recorded"; decision: SecurityDecision; createdAt: string }
+	| { type: "action_recorded"; action: SecurityActionRecord; createdAt: string }
 	| {
 			type: "decision_completed";
 			decisionId: string;
@@ -362,5 +514,14 @@ export interface ToolAuditRecord {
 	warnings?: string[];
 	isError?: boolean;
 	inputSummary: string;
+	requestedInputHash?: string;
+	normalizedInputHash?: string;
+	argvHash?: string;
+	command?: string;
+	actualArgs?: string[];
+	cwd?: string;
+	toolVersion?: string;
+	resultSource?: "local" | "remote-target";
+	idempotencyKey?: string;
 	resultSummary?: string;
 }

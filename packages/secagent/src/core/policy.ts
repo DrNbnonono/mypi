@@ -37,7 +37,18 @@ export function decidePermission(mode: PolicyMode, level: RiskLevel): "allow" | 
 	return "confirm";
 }
 
-export function canEnableAutonomous(state: SecurityState): { allowed: boolean; reason?: string } {
+export function canEnableAutonomous(
+	state: SecurityState,
+	options: { runtimePackagesReady?: boolean } = {},
+): { allowed: boolean; reason?: string } {
+	if (!state.task) return { allowed: false, reason: "autonomous mode requires an active security task" };
+	if (state.scope.targets.length === 0)
+		return { allowed: false, reason: "autonomous mode requires an explicit authorized target scope" };
+	if (options.runtimePackagesReady === false)
+		return {
+			allowed: false,
+			reason: "autonomous mode requires all pinned Sec runtime packages at their configured versions",
+		};
 	if (state.isolation.status === "unverified")
 		return {
 			allowed: false,

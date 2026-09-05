@@ -1,5 +1,6 @@
 import { redactSecurityText, redactSecurityValue } from "../core/audit.ts";
 import { graphIntegrityErrors } from "../core/evidence-graph.ts";
+import { targetGraphIntegrityErrors } from "../core/target-graph.ts";
 import type { SecurityFinding, SecurityState, ToolAuditRecord } from "../core/types.ts";
 
 export interface SecurityReportOptions {
@@ -21,14 +22,17 @@ export interface SecurityReportDocument {
 	ctfProfile: SecurityState["ctfProfile"];
 	evidence: SecurityState["evidence"];
 	evidenceGraph: SecurityState["evidenceGraph"];
+	targetGraph: SecurityState["targetGraph"];
 	hypotheses: string[];
 	rejectedHypotheses: string[];
 	findings: SecurityState["findings"];
 	decisions: SecurityState["decisions"];
+	actions: SecurityState["actions"];
 	replans: SecurityState["replans"];
 	observerSignals: SecurityState["observerSignals"];
 	delegations: SecurityState["delegations"];
 	graphIntegrityErrors: string[];
+	targetGraphIntegrityErrors: string[];
 	audit: ToolAuditRecord[];
 }
 
@@ -56,14 +60,17 @@ export function buildSecurityReportDocument(
 		ctfProfile: state.ctfProfile ? structuredClone(state.ctfProfile) : undefined,
 		evidence: structuredClone(state.evidence),
 		evidenceGraph: structuredClone(state.evidenceGraph),
+		targetGraph: structuredClone(state.targetGraph),
 		hypotheses: [...state.hypotheses],
 		rejectedHypotheses: [...state.rejectedHypotheses],
 		findings: structuredClone(state.findings),
 		decisions: structuredClone(state.decisions),
+		actions: structuredClone(state.actions),
 		replans: structuredClone(state.replans),
 		observerSignals: structuredClone(state.observerSignals),
 		delegations: structuredClone(state.delegations),
 		graphIntegrityErrors: graphIntegrityErrors(state),
+		targetGraphIntegrityErrors: targetGraphIntegrityErrors(state),
 		audit: options.includeAudit === false ? [] : structuredClone(records.slice(-limit(options.auditLimit))),
 	};
 	return options.redact === false ? document : redactSecurityValue(document);
@@ -114,14 +121,17 @@ export function buildSecurityReportMarkdown(
 		"",
 		`- Evidence: ${document.evidence.length}`,
 		`- Evidence edges: ${document.evidenceGraph.edges.length}`,
+		`- Target graph: ${document.targetGraph.nodes.length} nodes, ${document.targetGraph.edges.length} edges, revision ${document.targetGraph.revision}`,
 		`- Verifications: ${document.evidenceGraph.verifications.length}`,
 		`- Findings: ${document.findings.length} (${findingSummary(document.findings)}), verified=${verifiedFindings.length}`,
 		`- Decisions: ${document.decisions.length}`,
+		`- Actions: ${document.actions.length}`,
 		`- Replans: ${document.replans.length}`,
 		`- Observer signals: ${document.observerSignals.length}`,
 		`- Delegations: ${document.delegations.length}`,
 		`- Budget: decisions ${document.budget.usage.decisionsUsed}/${document.budget.limits.maxDecisions}, tools ${document.budget.usage.toolCallsUsed}/${document.budget.limits.maxToolCalls}, replans ${document.budget.usage.replansUsed}/${document.budget.limits.maxReplans}`,
 		`- Graph integrity errors: ${document.graphIntegrityErrors.length}`,
+		`- Target graph integrity errors: ${document.targetGraphIntegrityErrors.length}`,
 		...(document.ctfProfile
 			? [
 					`- CTF profile: ${document.ctfProfile.kind}; capabilities=${document.ctfProfile.recommendedCapabilities.join(", ")}`,
@@ -136,6 +146,15 @@ export function buildSecurityReportMarkdown(
 						`- ${item.id} [${item.kind}] confidence=${item.confidence.toFixed(2)}${item.sha256 ? ` sha256=${item.sha256}` : ""}: ${item.summary}`,
 				)
 			: ["No evidence recorded."]),
+		"",
+		"## Target and Attack Graph",
+		"",
+		...(document.targetGraph.nodes.length
+			? document.targetGraph.nodes.map(
+					(node) =>
+						`- ${node.id} [${node.kind}/${node.status}] confidence=${node.confidence.toFixed(2)}: ${node.label}`,
+				)
+			: ["No target graph nodes recorded."]),
 		"",
 		"## Hypothesis Verification",
 		"",
@@ -202,6 +221,12 @@ export function buildSecurityReportMarkdown(
 	for (const record of document.audit)
 		lines.push(
 			`- ${record.createdAt} ${record.blocked ? "BLOCKED" : record.isError ? "ERROR" : "COMPLETED"} ${record.toolName} ${record.risk.level}; policy=${record.policyMode}/${record.policyDecision}; targets=${record.scope.targets.join(", ") || "n/a"}${record.warnings?.length ? `; warnings=${record.warnings.join("; ")}` : ""}`,
+		);
+	lines.push("", "## Action Journal", "");
+	if (document.actions.length === 0) lines.push("No action journal entries recorded.");
+	for (const action of document.actions)
+		lines.push(
+			`- ${action.createdAt} ${action.status.toUpperCase()} ${action.toolName}; decision=${action.decisionId}; idempotency=${action.idempotencyKey}; requested=${action.requestedInputHash}${action.argvHash ? `; argv=${action.argvHash}` : ""}${action.verificationRequired ? "; verification-required" : ""}`,
 		);
 	return `${lines.join("\n").trimEnd()}\n`;
 }
