@@ -3,6 +3,7 @@ import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { delegationRecord, recommendAgentDispatch } from "./agents/control-plane.ts";
 import { assessBudget, normalizeBudgetLimits } from "./core/budget.ts";
+import { projectSearchBoard } from "./core/context-projection.ts";
 import { createEvidenceEdge, createHypothesis, graphIntegrityErrors } from "./core/evidence-graph.ts";
 import { assessTermination, buildOperationalMemory, observeSecurityState } from "./core/observer.ts";
 import { assessReplanNeed, createReplanRecord, rankCandidates } from "./core/planner.ts";
@@ -188,6 +189,7 @@ function registerCompetitionTools(pi: SecAgentExtensionAPI, runtime: SecAgentRun
 			"- For authorized CTF tasks, profile the challenge with security_ctf and use the recommended capability family.",
 			"- Use security_delegate for bounded specialist work; specialists may not widen scope, authorization, or budget.",
 			"- Use security_competition for platform lifecycle and flag submission; never infer authorization from discovered targets.",
+			projectSearchBoard(runtime.snapshot().state).text,
 		].join("\n")}`,
 	}));
 
@@ -371,7 +373,12 @@ function registerCompetitionTools(pi: SecAgentExtensionAPI, runtime: SecAgentRun
 				if (!existing.has(`${item.kind}:${item.reason}`))
 					runtime.append({ type: "observer_signal", signal: item, createdAt: item.createdAt });
 			const current = runtime.snapshot().state;
-			const details = { signals, memory: buildOperationalMemory(current), termination: assessTermination(current) };
+			const details = {
+				signals,
+				memory: buildOperationalMemory(current),
+				termination: assessTermination(current),
+				searchBoard: projectSearchBoard(current),
+			};
 			return textResult(JSON.stringify(details, null, 2), details);
 		},
 	});

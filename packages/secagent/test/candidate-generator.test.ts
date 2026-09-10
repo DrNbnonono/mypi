@@ -110,4 +110,82 @@ describe("state-aware candidate generation", () => {
 		});
 		expect(generateCandidateActions(state).candidates.some((candidate) => candidate.id === first.id)).toBe(false);
 	});
+
+	it("skips bootstrap tools whose path is already explored on the board", () => {
+		const state = createInitialSecurityState();
+		state.task = {
+			id: "web",
+			goal: "fingerprint service",
+			scenario: "web-security",
+			assets: [],
+			constraints: [],
+			successCriteria: [],
+			declaredAuthorization: [],
+			pendingConfirmations: [],
+			createdAt: "2026-09-05T00:00:00Z",
+		};
+		state.stage = "recon";
+		state.scope.targets = [{ id: "scope", kind: "url", value: "http://127.0.0.1/" }];
+		const generated = generateCandidateActions(state);
+		const httpx = generated.candidates.find((candidate) => candidate.tool === "httpx");
+		expect(httpx?.pathKey).toBeDefined();
+		if (!httpx?.pathKey) return;
+		state.searchBoard.paths.push({
+			pathKey: httpx.pathKey,
+			tool: "httpx",
+			capability: "web-enumeration",
+			status: "explored",
+			summary: "already fingerprinted",
+			updatedAt: "2026-09-05T00:00:01Z",
+		});
+		expect(generateCandidateActions(state).candidates.some((candidate) => candidate.tool === "httpx")).toBe(false);
+	});
+
+	it("uses imported facts as the candidate source instead of bootstrap templates", () => {
+		const state = createInitialSecurityState();
+		state.task = {
+			id: "web",
+			goal: "resume fingerprinting",
+			scenario: "web-security",
+			assets: [],
+			constraints: [],
+			successCriteria: [],
+			declaredAuthorization: [],
+			pendingConfirmations: [],
+			createdAt: "2026-09-05T00:00:00Z",
+		};
+		state.stage = "recon";
+		state.scope.targets = [{ id: "scope", kind: "url", value: "http://127.0.0.1/" }];
+		const fact = {
+			id: "knowledge-fact",
+			key: "http-surface:web-enumeration:http://127.0.0.1/",
+			kind: "http-surface" as const,
+			statement: "imported HTTP surface",
+			targetRefs: ["http://127.0.0.1/"],
+			evidenceIds: [],
+			confidence: 0.8,
+			origin: "knowledge" as const,
+			sourceTool: "httpx",
+			sourceCapability: "web-enumeration",
+			createdAt: "2026-09-05T00:00:00Z",
+			updatedAt: "2026-09-05T00:00:00Z",
+		};
+		state.searchBoard.facts.push(fact);
+		state.searchBoard.intents.push({
+			id: "intent:http-surface:curl:web-request-analysis",
+			statement: "Compare bounded HTTP request variants on the observed surface",
+			status: "open",
+			parentFactKeys: [fact.key],
+			tool: "curl",
+			capability: "web-request-analysis",
+			targets: ["http://127.0.0.1/"],
+			createdAt: fact.createdAt,
+			updatedAt: fact.createdAt,
+		});
+		const generated = generateCandidateActions(state);
+		expect(generated.candidates.length).toBeGreaterThan(0);
+		expect(generated.candidates.every((candidate) => candidate.intentId)).toBe(true);
+		expect(generated.candidates.some((candidate) => candidate.tool === "httpx")).toBe(false);
+		expect(generated.candidates.some((candidate) => candidate.tool === "curl")).toBe(true);
+	});
 });

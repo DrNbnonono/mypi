@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { formatAuditRecords, summarizeUnknown } from "./core/audit.ts";
+import { projectSearchBoard } from "./core/context-projection.ts";
 import { rankCandidates, riskScoreToLevel } from "./core/planner.ts";
 import { assessToolRisk, decidePermission } from "./core/policy.ts";
 import { assessToolScope, inferScopeTargetKind, normalizeScopeValue } from "./core/scope.ts";
@@ -244,6 +245,7 @@ function registerSecAgent(pi: SecAgentExtensionAPI, runtime: SecAgentRuntime): v
 			"- Prefer low-risk, reversible, high-information actions and bounded specialist delegation.",
 			"- Use sec-recon, sec-web, sec-analysis, sec-response, sec-vuln, and sec-reverse only with bounded tools, time, turns, and scope.",
 			"- Never bypass OS/container isolation, protected credential paths, or audit.",
+			projectSearchBoard(runtime.snapshot().state).text,
 		].join("\n")}`,
 	}));
 

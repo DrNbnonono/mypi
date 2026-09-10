@@ -314,3 +314,20 @@ T5. Web 稳定性（幂等键 / 防重复点击 / SSE revision / 过期事件丢
 - 任何破坏"重启后零副作用重放"的改动直接回退
 - 任何凭据相关字段必须脱敏引用，不允许明文落日志
 - 真实平台测试只在显式授权环境执行，缺一不可
+
+---
+
+## 11. 能力主线（已落地）：搜索黑板与跨 Session 记忆
+
+与上面的 P0 工程项分开：本主线不包含 Web 面板、Playwright sidecar、高危适配器、崩溃恢复。
+
+已落地：
+
+- 会话内 `searchBoard`：Fact / Intent / Hint / Path；失败只关闭当前 Intent
+- SQLite `$PI_CODING_AGENT_DIR/secagent/knowledge.sqlite`；比赛按 `challenge:${providerId}:${challengeCode}` 共享，渗透按授权 scope 哈希共享；不同题 / 不同 scope 零串数据
+- 候选从 open Intent 生成，模板只做空黑板 bootstrap；已 `explored` / `dead-end` 的 `pathKey` 不再作为自主候选
+- 执行仍串行；`maxBranches` 默认 2；终止 oracle 不采信模型口头「做完了」
+- `before_agent_start` 注入黑板压缩投影（约 4 KiB 上限），不塞原始 stdout
+- 不落明文凭证 / Flag / 原始 stdout；attempt `workspaceRef` 不进库；子 Agent 工具白名单不扩大
+
+崩溃恢复仍走第 2 节 P0，不在本主线范围。

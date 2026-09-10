@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { AutonomousSearchLoop } from "../src/core/autonomous-loop.ts";
+import { createSearchFact } from "../src/core/search-board.ts";
 import { createInitialSecurityState } from "../src/core/state.ts";
 import type { SecurityScenario, SecuritySessionStore, SecurityState } from "../src/index.ts";
 import { SecAgentRuntime } from "../src/runtime.ts";
@@ -226,5 +227,89 @@ describe("autonomous state-space loop", () => {
 		expect(tools).toContain("readelf");
 		expect(runtime.snapshot().state.ctfProfile?.kind).toBe("pwn");
 		expect(runtime.snapshot().state.delegations.some((item) => item.role === "ctf-specialist")).toBe(false);
+	});
+
+	it("continues a sibling intent after one branch fails", async () => {
+		const state = createInitialSecurityState();
+		state.task = {
+			id: "web-branch",
+			goal: "map after failure",
+			scenario: "web-security",
+			assets: [],
+			constraints: [],
+			successCriteria: ["collect HTTP evidence"],
+			declaredAuthorization: ["loopback"],
+			pendingConfirmations: [],
+			createdAt: "2026-09-05T00:00:00Z",
+		};
+		state.goal = state.task.goal;
+		state.stage = "recon";
+		state.scope = {
+			targets: [{ id: "scope", kind: "url", value: "http://127.0.0.1:18080/" }],
+			authorizationSource: "test",
+		};
+		const runtime = new SecAgentRuntime(new MemoryStore());
+		appendInitial(runtime, state);
+		const imported = createSearchFact({
+			kind: "http-surface",
+			statement: "imported HTTP surface",
+			targetRefs: ["http://127.0.0.1:18080/"],
+			origin: "knowledge",
+			sourceTool: "httpx",
+			sourceCapability: "web-enumeration",
+			createdAt: state.task.createdAt,
+		});
+		runtime.append({
+			type: "search_board_hydrated",
+			createdAt: state.task.createdAt,
+			facts: [imported],
+			intents: [
+				{
+					id: "intent-httpx-sibling",
+					statement: "Fingerprint HTTP services on the observed network surface",
+					status: "open",
+					parentFactKeys: [imported.key],
+					tool: "httpx",
+					capability: "web-enumeration",
+					targets: ["http://127.0.0.1:18080/"],
+					createdAt: state.task.createdAt,
+					updatedAt: state.task.createdAt,
+				},
+				{
+					id: "intent-curl-sibling",
+					statement: "Inspect HTTP behavior of the observed service",
+					status: "open",
+					parentFactKeys: [imported.key],
+					tool: "curl",
+					capability: "web-request-analysis",
+					targets: ["http://127.0.0.1:18080/"],
+					createdAt: state.task.createdAt,
+					updatedAt: state.task.createdAt,
+				},
+			],
+			hints: [],
+			paths: [],
+		});
+		const executor = new ScenarioExecutor();
+		executor.failNext("httpx");
+		const result = await new AutonomousSearchLoop(runtime, new SecurityExecutionGateway(runtime)).run(
+			{ cwd: process.cwd(), executor },
+			{ maxSteps: 3 },
+		);
+		const tools = runtime
+			.snapshot()
+			.state.decisions.map(
+				(decision) => decision.candidates.find((candidate) => candidate.id === decision.selectedActionId)?.tool,
+			);
+		expect(result.status === "blocked").toBe(false);
+		expect(new Set(tools.filter(Boolean)).size).toBeGreaterThan(1);
+		expect(runtime.snapshot().state.searchBoard.intents.some((intent) => intent.status === "dead-end")).toBe(true);
+		expect(
+			runtime
+				.snapshot()
+				.state.searchBoard.intents.some(
+					(intent) => intent.status === "open" || intent.status === "resolved" || intent.status === "claimed",
+				),
+		).toBe(true);
 	});
 });

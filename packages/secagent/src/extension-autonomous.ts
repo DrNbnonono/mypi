@@ -1,6 +1,9 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { type AutonomousRunResult, AutonomousSearchLoop, type AutonomousStepResult } from "./core/autonomous-loop.ts";
+import { projectSearchBoard } from "./core/context-projection.ts";
+import { assessTermination, buildOperationalMemory } from "./core/observer.ts";
+import { createEmptySearchBoard, openSearchIntents } from "./core/search-board.ts";
 import { defineSecAgentExtension, type SecAgentInlineExtension } from "./host-contract.ts";
 import type { SecAgentRuntime } from "./runtime.ts";
 import { SecurityExecutionGateway } from "./tools/gateway.ts";
@@ -11,13 +14,13 @@ const AutonomousParams = Type.Object({
 	stopOnExecutionFailure: Type.Optional(Type.Boolean()),
 });
 
-type AutonomousDetails = AutonomousRunResult | AutonomousStepResult | ReturnType<SecAgentRuntime["snapshot"]>;
+type AutonomousDetails = AutonomousRunResult | AutonomousStepResult | Record<string, unknown>;
 
 export function createSecAgentAutonomousExtension(runtime: SecAgentRuntime): SecAgentInlineExtension {
 	return defineSecAgentExtension("secagent-autonomous", (pi) => {
 		const loop = new AutonomousSearchLoop(runtime, new SecurityExecutionGateway(runtime));
 		pi.on("before_agent_start", async (event) => ({
-			systemPrompt: `${event.systemPrompt}\n\nSecAgent autonomous loop: use security_autonomous when bounded execution should continue across candidate generation, planning, gateway execution, evidence capture, observer supervision, verification, and replanning. Out-of-scope execution is permitted only after autonomous isolation and authorization prerequisites and must remain a high-risk audited warning. The loop never bypasses protected paths, isolation, audit, or deterministic adapter inputs.`,
+			systemPrompt: `${event.systemPrompt}\n\nSecAgent autonomous loop: use security_autonomous when bounded execution should continue across candidate generation, planning, gateway execution, evidence capture, observer supervision, verification, and replanning. Out-of-scope execution is permitted only after autonomous isolation and authorization prerequisites and must remain a high-risk audited warning. The loop never bypasses protected paths, isolation, audit, or deterministic adapter inputs.\n\n${projectSearchBoard(runtime.snapshot().state).text}`,
 		}));
 		pi.registerTool<typeof AutonomousParams, AutonomousDetails>({
 			name: "security_autonomous",
@@ -29,7 +32,19 @@ export function createSecAgentAutonomousExtension(runtime: SecAgentRuntime): Sec
 			async execute(_id, params, signal, _update, ctx) {
 				if (params.action === "inspect") {
 					const snapshot = runtime.snapshot();
-					return { content: [{ type: "text", text: JSON.stringify(snapshot, null, 2) }], details: snapshot };
+					const board = snapshot.state.searchBoard ?? createEmptySearchBoard();
+					const details = {
+						...snapshot,
+						searchBoard: {
+							facts: board.facts.length,
+							openIntents: openSearchIntents(board).map((intent) => intent.id),
+							deadEnds: board.paths.filter((path) => path.status === "dead-end").map((path) => path.pathKey),
+							projection: projectSearchBoard(snapshot.state),
+							memory: buildOperationalMemory(snapshot.state),
+							termination: assessTermination(snapshot.state),
+						},
+					};
+					return { content: [{ type: "text", text: JSON.stringify(details, null, 2) }], details };
 				}
 				const gatewayContext = {
 					cwd: ctx.cwd,

@@ -41,7 +41,17 @@ export type ReplanTrigger =
 	| "evidence-insufficient"
 	| "budget-pressure"
 	| "observer-drift";
-export type ObserverSignalKind = "stalled" | "drift" | "repeated-failure" | "context-pressure" | "termination-risk";
+export type ObserverSignalKind =
+	| "stalled"
+	| "drift"
+	| "repeated-failure"
+	| "context-pressure"
+	| "termination-risk"
+	| "repeated-path";
+export type SearchFactKind = "service-observed" | "http-surface" | "artifact-property" | "dead-end";
+export type SearchFactOrigin = "session" | "knowledge";
+export type SearchIntentStatus = "open" | "claimed" | "resolved" | "dead-end" | "merged";
+export type SearchPathStatus = "explored" | "dead-end" | "verified";
 export type SecurityActionStatus = "planned" | "started" | "succeeded" | "failed" | "unknown" | "cancelled";
 export type SecurityTargetNodeKind =
 	| "host"
@@ -325,6 +335,8 @@ export interface CandidateActionInput {
 	stopConditions?: string[];
 	fallbackActionIds?: string[];
 	estimatedDurationMs?: number;
+	intentId?: string;
+	pathKey?: string;
 }
 
 export interface ScoredAction extends CandidateActionInput {
@@ -367,6 +379,7 @@ export interface SecurityDecision {
 	planRevision?: number;
 	attempt?: number;
 	replanId?: string;
+	intentId?: string;
 	budgetSnapshot?: SecurityBudgetState;
 }
 
@@ -425,8 +438,61 @@ export interface CtfChallengeProfile {
 	createdAt: string;
 }
 
+export interface SearchFact {
+	id: string;
+	key: string;
+	kind: SearchFactKind;
+	statement: string;
+	targetRefs: string[];
+	evidenceIds: string[];
+	confidence: number;
+	origin: SearchFactOrigin;
+	sourceTool?: string;
+	sourceCapability?: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface SearchIntent {
+	id: string;
+	statement: string;
+	status: SearchIntentStatus;
+	parentFactKeys: string[];
+	tool: string;
+	capability: string;
+	targets?: string[];
+	pathKey?: string;
+	claimedByDecisionId?: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface SearchHint {
+	id: string;
+	reason: string;
+	pathKey?: string;
+	intentId?: string;
+	createdAt: string;
+}
+
+export interface SearchPathRecord {
+	pathKey: string;
+	tool: string;
+	capability?: string;
+	status: SearchPathStatus;
+	summary: string;
+	updatedAt: string;
+}
+
+export interface SecuritySearchBoard {
+	facts: SearchFact[];
+	intents: SearchIntent[];
+	hints: SearchHint[];
+	paths: SearchPathRecord[];
+}
+
 export interface SecurityState {
-	version: 6;
+	version: 7;
 	revision: number;
 	task?: SecurityTaskSpec;
 	goal: string;
@@ -449,6 +515,7 @@ export interface SecurityState {
 	delegations: SecurityDelegationRecord[];
 	budget: SecurityBudgetState;
 	ctfProfile?: CtfChallengeProfile;
+	searchBoard: SecuritySearchBoard;
 }
 
 export type SecurityEvent =
@@ -482,7 +549,19 @@ export type SecurityEvent =
 	| { type: "delegation_recorded"; delegation: SecurityDelegationRecord; createdAt: string }
 	| { type: "budget_configured"; limits: SecurityBudgetLimits; createdAt: string }
 	| { type: "budget_consumed"; resource: "decision" | "tool-call" | "replan"; amount: number; createdAt: string }
-	| { type: "ctf_profiled"; profile: CtfChallengeProfile; createdAt: string };
+	| { type: "ctf_profiled"; profile: CtfChallengeProfile; createdAt: string }
+	| { type: "search_fact_recorded"; fact: SearchFact; createdAt: string }
+	| { type: "search_intent_updated"; intent: SearchIntent; createdAt: string }
+	| { type: "search_hint_recorded"; hint: SearchHint; createdAt: string }
+	| { type: "search_path_recorded"; path: SearchPathRecord; createdAt: string }
+	| {
+			type: "search_board_hydrated";
+			facts: SearchFact[];
+			intents: SearchIntent[];
+			hints: SearchHint[];
+			paths: SearchPathRecord[];
+			createdAt: string;
+	  };
 
 export interface RiskAssessment {
 	level: RiskLevel;

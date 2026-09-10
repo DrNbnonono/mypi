@@ -1,9 +1,11 @@
 import { getSecurityToolAdapter, getSecurityToolMetadata } from "../tools/registry.ts";
 import { buildDefaultActionInput } from "./action-input.ts";
 import { strategyKey } from "./planner.ts";
+import { blockedPathKeys, createActionPathKey, createEmptySearchBoard, openSearchIntents } from "./search-board.ts";
 import type {
 	CandidateActionInput,
 	CtfChallengeKind,
+	SearchIntent,
 	SecurityScenario,
 	SecurityStage,
 	SecurityState,
@@ -239,12 +241,109 @@ function failedStrategyCount(state: SecurityState, candidate: CandidateActionInp
 	}).length;
 }
 
+function attachPathKey(state: SecurityState, candidate: CandidateActionInput): CandidateActionInput | undefined {
+	const defaultInput = buildDefaultActionInput(state, candidate);
+	if (!defaultInput.ok || !defaultInput.input) return undefined;
+	return {
+		...candidate,
+		pathKey: createActionPathKey({
+			tool: candidate.tool,
+			capability: candidate.capability,
+			targets: candidate.targets,
+			normalizedInput: defaultInput.input,
+		}),
+	};
+}
+
+function isBlocked(state: SecurityState, candidate: CandidateActionInput): boolean {
+	const board = state.searchBoard ?? createEmptySearchBoard();
+	if (candidate.pathKey && blockedPathKeys(board).has(candidate.pathKey)) return true;
+	if (candidate.intentId) {
+		const intent = board.intents.find((item) => item.id === candidate.intentId);
+		if (intent && intent.status !== "open") return true;
+	}
+	return false;
+}
+
+function candidateFromIntent(state: SecurityState, intent: SearchIntent): CandidateActionInput | undefined {
+	if (!getSecurityToolAdapter(intent.tool)) return undefined;
+	const metadata = getSecurityToolMetadata(intent.tool);
+	const candidate: CandidateActionInput = {
+		id: `auto-${intent.tool}-${intent.capability}`,
+		tool: intent.tool,
+		capability: intent.capability,
+		description: intent.statement,
+		goalRelevance: 0.88,
+		informationGain: 0.8,
+		confidence: 0.82,
+		cost: 0.2,
+		preconditions: [...(metadata?.preconditions ?? [])],
+		targets: intent.targets,
+		expectedEvidence: [],
+		successCriteria: state.task?.successCriteria.slice(0, 6) ?? [],
+		stopConditions: ["scope changes", "budget exhausted", "evidence contradicts the action premise"],
+		intentId: intent.id,
+		pathKey: intent.pathKey,
+	};
+	return attachPathKey(state, candidate);
+}
+
+function finalizeCandidateSet(
+	state: SecurityState,
+	scenario: SecurityScenario,
+	ctfKind: CtfChallengeKind | undefined,
+	scopeTargets: string[],
+	artifactPath: string | undefined,
+	candidates: CandidateActionInput[],
+	gaps: string[],
+): GeneratedCandidateSet {
+	const networkRelevant = TEMPLATES.some(
+		(template) => template.network && scenarioMatches(template, scenario, ctfKind),
+	);
+	const artifactRelevant = TEMPLATES.some(
+		(template) => template.localArtifact && scenarioMatches(template, scenario, ctfKind),
+	);
+	if (networkRelevant && scopeTargets.length === 0)
+		gaps.push("Network-capable strategies are withheld until explicit authorized scope is set");
+	if (artifactRelevant && !artifactPath)
+		gaps.push("Local artifact strategies require an input asset with an in-workspace path");
+	if (scenario === "ctf" && (ctfKind === "crypto" || ctfKind === "unknown"))
+		gaps.push(
+			"No arbitrary computation adapter is auto-generated; use bounded reasoning/MCP capabilities and keep execution under the parent SecAgent policy",
+		);
+	if (candidates.length === 0 && state.decisions.some((decision) => decision.resultStatus === "succeeded"))
+		gaps.push(
+			"All deterministic candidates for this state are already completed or exhausted; add evidence/hypotheses, change stage, or finish the task",
+		);
+	return { candidates, gaps: [...new Set(gaps)] };
+}
+
 export function generateCandidateActions(state: SecurityState): GeneratedCandidateSet {
 	const scenario = state.task?.scenario ?? "penetration-test";
 	const ctfKind = state.ctfProfile?.kind;
 	const artifactPath = firstArtifactPath(state);
 	const scopeTargets = state.scope.targets.map((target) => target.value);
 	const gaps: string[] = [];
+	const board = state.searchBoard ?? createEmptySearchBoard();
+	const openIntents = openSearchIntents(board);
+	if (openIntents.length > 0) {
+		const fromIntents = openIntents.flatMap((intent) => {
+			const candidate = candidateFromIntent(state, intent);
+			if (!candidate) return [];
+			if (failedStrategyCount(state, candidate) >= 2) return [];
+			if (isBlocked(state, candidate)) return [];
+			const defaultInput = buildDefaultActionInput(state, candidate);
+			if (!defaultInput.ok) {
+				if (defaultInput.reason) gaps.push(`${candidate.tool}: ${defaultInput.reason}`);
+				return [];
+			}
+			return [candidate];
+		});
+		if (fromIntents.length > 0)
+			return finalizeCandidateSet(state, scenario, ctfKind, scopeTargets, artifactPath, fromIntents, gaps);
+		gaps.push("Open intents exist but none currently map to a runnable audited adapter");
+	}
+
 	const candidates = TEMPLATES.flatMap((template) => {
 		if (!scenarioMatches(template, scenario, ctfKind)) return [];
 		if (!getSecurityToolAdapter(template.tool)) return [];
@@ -267,32 +366,16 @@ export function generateCandidateActions(state: SecurityState): GeneratedCandida
 			successCriteria: state.task?.successCriteria.slice(0, 6) ?? [],
 			stopConditions: ["scope changes", "budget exhausted", "evidence contradicts the action premise"],
 		};
-		if (wasSuccessfullyCompleted(state, candidate.id)) return [];
-		if (failedStrategyCount(state, candidate) >= 2) return [];
-		const defaultInput = buildDefaultActionInput(state, candidate);
-		if (!defaultInput.ok) {
+		const withPath = attachPathKey(state, candidate);
+		if (!withPath) {
+			const defaultInput = buildDefaultActionInput(state, candidate);
 			if (defaultInput.reason) gaps.push(`${candidate.tool}: ${defaultInput.reason}`);
 			return [];
 		}
-		return [candidate];
+		if (wasSuccessfullyCompleted(state, withPath.id)) return [];
+		if (failedStrategyCount(state, withPath) >= 2) return [];
+		if (isBlocked(state, withPath)) return [];
+		return [withPath];
 	});
-	const networkRelevant = TEMPLATES.some(
-		(template) => template.network && scenarioMatches(template, scenario, ctfKind),
-	);
-	const artifactRelevant = TEMPLATES.some(
-		(template) => template.localArtifact && scenarioMatches(template, scenario, ctfKind),
-	);
-	if (networkRelevant && scopeTargets.length === 0)
-		gaps.push("Network-capable strategies are withheld until explicit authorized scope is set");
-	if (artifactRelevant && !artifactPath)
-		gaps.push("Local artifact strategies require an input asset with an in-workspace path");
-	if (scenario === "ctf" && (ctfKind === "crypto" || ctfKind === "unknown"))
-		gaps.push(
-			"No arbitrary computation adapter is auto-generated; use bounded reasoning/MCP capabilities and keep execution under the parent SecAgent policy",
-		);
-	if (candidates.length === 0 && state.decisions.some((decision) => decision.resultStatus === "succeeded"))
-		gaps.push(
-			"All deterministic candidates for this state are already completed or exhausted; add evidence/hypotheses, change stage, or finish the task",
-		);
-	return { candidates, gaps: [...new Set(gaps)] };
+	return finalizeCandidateSet(state, scenario, ctfKind, scopeTargets, artifactPath, candidates, gaps);
 }

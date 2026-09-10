@@ -7,6 +7,7 @@ import { assessBudget } from "./budget.ts";
 import { generateCandidateActions } from "./candidate-generator.ts";
 import { assessTermination, observeSecurityState } from "./observer.ts";
 import { assessReplanNeed, createReplanRecord, rankCandidates } from "./planner.ts";
+import { branchStartBlockReason, MAX_SEARCH_BRANCHES, markIntentStatus, pendingBranchCount } from "./search-board.ts";
 import type { SecurityDecision, SecurityObserverSignal, SecurityStage } from "./types.ts";
 
 export type AutonomousStepStatus = "executed" | "complete" | "blocked" | "no-candidate";
@@ -26,6 +27,7 @@ export interface AutonomousStepResult {
 export interface AutonomousRunOptions {
 	maxSteps?: number;
 	stopOnExecutionFailure?: boolean;
+	maxBranches?: number;
 }
 
 export interface AutonomousRunResult {
@@ -70,13 +72,10 @@ function appendObserverSignals(runtime: SecAgentRuntime): SecurityObserverSignal
 	return appended;
 }
 
-function hasPendingDecision(runtime: SecAgentRuntime): boolean {
-	return runtime.snapshot().state.decisions.some((decision) => decision.resultStatus === "pending");
-}
-
 export class AutonomousSearchLoop {
 	private readonly runtime: SecAgentRuntime;
 	private readonly gateway: SecurityExecutionGateway;
+	private maxBranches = MAX_SEARCH_BRANCHES;
 
 	constructor(runtime: SecAgentRuntime, gateway: SecurityExecutionGateway) {
 		this.runtime = runtime;
@@ -106,10 +105,10 @@ export class AutonomousSearchLoop {
 				candidateGaps: [],
 			};
 		}
-		if (hasPendingDecision(this.runtime)) {
+		if (pendingBranchCount(this.runtime.snapshot().state) >= this.maxBranches) {
 			return {
 				status: "blocked",
-				reason: "a pending decision already exists; resolve it before starting another autonomous step",
+				reason: `Pending branch limit ${this.maxBranches} reached; resolve a decision before starting another`,
 				verificationIds: [],
 				observerSignals: [],
 				termination: initialTermination,
@@ -179,13 +178,17 @@ export class AutonomousSearchLoop {
 		}
 
 		const current = this.runtime.snapshot().state;
-		const ranked = rankCandidates(generated.candidates, { state: current });
+		const ranked = rankCandidates(generated.candidates, { state: current }).filter(
+			(candidate) => !branchStartBlockReason(current, candidate.intentId, this.maxBranches),
+		);
 		const selected = ranked[0];
 		if (!selected) {
 			const termination = assessTermination(current);
 			return {
 				status: "no-candidate",
-				reason: "candidate ranking produced no action",
+				reason: generated.candidates.length
+					? "all ranked candidates are claimed by pending branches"
+					: "candidate ranking produced no action",
 				verificationIds: preVerification.map((item) => item.id),
 				observerSignals: preSignals,
 				termination,
@@ -219,9 +222,25 @@ export class AutonomousSearchLoop {
 			planRevision: current.decisions.length + 1,
 			attempt: current.decisions.filter((item) => item.goal === current.goal).length + 1,
 			replanId,
+			intentId: selected.intentId,
 			budgetSnapshot: structuredClone(current.budget),
 		};
 		this.runtime.append({ type: "decision_recorded", decision, createdAt: decision.createdAt });
+		if (selected.intentId) {
+			const claimed = markIntentStatus(
+				this.runtime.snapshot().state.searchBoard,
+				selected.intentId,
+				"claimed",
+				{ claimedByDecisionId: decision.id, pathKey: selected.pathKey },
+				decision.createdAt,
+			);
+			if (claimed)
+				this.runtime.append({
+					type: "search_intent_updated",
+					intent: { ...claimed, status: "claimed", claimedByDecisionId: decision.id, pathKey: selected.pathKey },
+					createdAt: decision.createdAt,
+				});
+		}
 		this.runtime.append({
 			type: "budget_consumed",
 			resource: "decision",
@@ -254,6 +273,7 @@ export class AutonomousSearchLoop {
 	}
 
 	async run(context: SecurityGatewayContext, options: AutonomousRunOptions = {}): Promise<AutonomousRunResult> {
+		this.maxBranches = Math.max(1, Math.trunc(options.maxBranches ?? MAX_SEARCH_BRANCHES));
 		const maxSteps = Math.max(1, Math.min(50, Math.trunc(options.maxSteps ?? 8)));
 		const steps: AutonomousStepResult[] = [];
 		for (let index = 0; index < maxSteps; index += 1) {

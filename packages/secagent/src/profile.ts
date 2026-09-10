@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import type { SecurityBrowserService } from "./browser/service.ts";
 import type { CompetitionProvider } from "./competition/provider.ts";
 import type { CompetitionAttemptWorkspace } from "./competition/scheduler.ts";
+import { defaultKnowledgeDbPath } from "./core/knowledge-store.ts";
 import type { SecuritySessionStore } from "./core/state.ts";
 import type { CompetitionChallenge } from "./core/types.ts";
 import { createSecAgentExtension } from "./extension.ts";
@@ -84,6 +86,8 @@ export function createSecAgentProfile(options: CreateSecAgentProfileOptions = {}
 				competitionHintsAllowed: options.competitionHintsAllowed,
 				createCompetitionAttemptWorkspace: options.createCompetitionAttemptWorkspace,
 				browserService: options.browserService,
+				knowledgeDbPath: defaultKnowledgeDbPath(),
+				sessionId: randomUUID(),
 			});
 			return {
 				snapshot: () => runtime?.snapshot(),

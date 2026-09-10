@@ -3,9 +3,11 @@ import type { SecurityBrowserService } from "./browser/service.ts";
 import type { CompetitionProvider } from "./competition/provider.ts";
 import { type CompetitionAttemptWorkspace, CompetitionScheduler } from "./competition/scheduler.ts";
 import { appendAuditRecord, readAuditRecords, redactSecurityValue } from "./core/audit.ts";
+import { resolveKnowledgeSpace, SecurityKnowledgeStore } from "./core/knowledge-store.ts";
 import { assessReplanNeed } from "./core/planner.ts";
 import { canEnableAutonomous } from "./core/policy.ts";
 import { inferScopeTargetKind, normalizeScopeValue } from "./core/scope.ts";
+import { searchEventsAfterDecision, searchHydrationEvent } from "./core/search-board.ts";
 import type { SecuritySessionStore } from "./core/state.ts";
 import { appendPolicyChange, appendSecurityEvent, replaySecurityState } from "./core/state.ts";
 import type {
@@ -51,6 +53,9 @@ export interface SecAgentRuntimeOptions {
 		attemptId: string,
 	) => Promise<CompetitionAttemptWorkspace>;
 	browserService?: SecurityBrowserService;
+	knowledgeDbPath?: string;
+	knowledgeStore?: SecurityKnowledgeStore;
+	sessionId?: string;
 }
 
 export interface SecAgentProfileSnapshot {
@@ -73,6 +78,9 @@ export class SecAgentRuntime {
 	private readonly cwd: string;
 	private diagnostics: SecAgentDiagnostics | undefined;
 	private readonly competitionScheduler: CompetitionScheduler | undefined;
+	private readonly knowledgeStore: SecurityKnowledgeStore | undefined;
+	private readonly sessionId: string | undefined;
+	private syncingKnowledge = false;
 
 	private readonly runtimePackagesReady: boolean | undefined;
 
@@ -81,6 +89,10 @@ export class SecAgentRuntime {
 		this.cwd = options.cwd ?? process.cwd();
 		this.runtimePackagesReady = options.runtimePackagesReady;
 		this.browserService = options.browserService;
+		this.sessionId = options.sessionId;
+		this.knowledgeStore =
+			options.knowledgeStore ??
+			(options.knowledgeDbPath ? new SecurityKnowledgeStore(options.knowledgeDbPath) : undefined);
 		this.state = replaySecurityState(store);
 		this.competitionScheduler = options.competitionProvider
 			? new CompetitionScheduler(options.competitionProvider, {
@@ -108,6 +120,10 @@ export class SecAgentRuntime {
 		this.state = replaySecurityState(this.store);
 		this.competitionScheduler?.replaceState(this.state.competition);
 		this.emit();
+	}
+
+	dispose(): void {
+		this.knowledgeStore?.close();
 	}
 
 	snapshot(): SecAgentProfileSnapshot {
@@ -252,6 +268,15 @@ export class SecAgentRuntime {
 	append(event: SecurityEvent): SecurityState {
 		this.state = appendSecurityEvent(this.store, this.state, redactSecurityValue(event));
 		this.emit();
+		if (this.syncingKnowledge) return this.state;
+		this.syncingKnowledge = true;
+		try {
+			if (event.type === "scope_set" || event.type === "competition_state_changed" || event.type === "task_started")
+				this.hydrateKnowledge();
+			if (event.type === "decision_completed") this.recordDecisionMemory(event.decisionId);
+		} finally {
+			this.syncingKnowledge = false;
+		}
 		return this.state;
 	}
 
@@ -283,5 +308,31 @@ export class SecAgentRuntime {
 			},
 			createdAt: new Date().toISOString(),
 		});
+	}
+
+	private hydrateKnowledge(): void {
+		if (!this.knowledgeStore) return;
+		const space = resolveKnowledgeSpace(this.state);
+		if (!space) return;
+		const snapshot = this.knowledgeStore.load(space);
+		const event = searchHydrationEvent(this.state, snapshot, new Date().toISOString());
+		if (event) this.append(event);
+	}
+
+	private recordDecisionMemory(decisionId: string): void {
+		const createdAt = new Date().toISOString();
+		for (const event of searchEventsAfterDecision(this.state, decisionId, createdAt)) this.append(event);
+		this.persistKnowledge();
+	}
+
+	private persistKnowledge(): void {
+		if (!this.knowledgeStore) return;
+		const space = resolveKnowledgeSpace(this.state);
+		if (!space) return;
+		for (const fact of this.state.searchBoard.facts) {
+			if (fact.origin !== "session") continue;
+			this.knowledgeStore.upsertFact(space, fact, this.sessionId);
+		}
+		for (const path of this.state.searchBoard.paths) this.knowledgeStore.upsertPath(space, path);
 	}
 }

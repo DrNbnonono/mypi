@@ -1,4 +1,13 @@
 import { DEFAULT_SECURITY_BUDGET } from "./budget.ts";
+import {
+	applyHydratedBoard,
+	cloneSearchBoard,
+	createEmptySearchBoard,
+	recordSearchHint,
+	upsertSearchFact,
+	upsertSearchIntent,
+	upsertSearchPath,
+} from "./search-board.ts";
 import type { PolicyMode, SecurityEvent, SecurityState } from "./types.ts";
 
 export const SECURITY_EVENT_ENTRY = "secagent:event";
@@ -10,7 +19,7 @@ export interface SecuritySessionStore {
 
 export function createInitialSecurityState(): SecurityState {
 	return {
-		version: 6,
+		version: 7,
 		revision: 0,
 		goal: "",
 		stage: "understanding",
@@ -29,6 +38,7 @@ export function createInitialSecurityState(): SecurityState {
 		observerSignals: [],
 		delegations: [],
 		budget: structuredClone(DEFAULT_SECURITY_BUDGET),
+		searchBoard: createEmptySearchBoard(),
 	};
 }
 
@@ -82,6 +92,7 @@ function cloneState(state: SecurityState): SecurityState {
 		delegations: state.delegations.map((delegation) => ({ ...delegation, evidenceIds: [...delegation.evidenceIds] })),
 		budget: structuredClone(state.budget),
 		ctfProfile: state.ctfProfile ? structuredClone(state.ctfProfile) : undefined,
+		searchBoard: cloneSearchBoard(state.searchBoard ?? createEmptySearchBoard()),
 	};
 }
 
@@ -228,6 +239,21 @@ export function applySecurityEvent(state: SecurityState, event: SecurityEvent): 
 			return next;
 		case "ctf_profiled":
 			next.ctfProfile = structuredClone(event.profile);
+			return next;
+		case "search_fact_recorded":
+			upsertSearchFact(next.searchBoard, event.fact);
+			return next;
+		case "search_intent_updated":
+			upsertSearchIntent(next.searchBoard, event.intent);
+			return next;
+		case "search_hint_recorded":
+			recordSearchHint(next.searchBoard, event.hint);
+			return next;
+		case "search_path_recorded":
+			upsertSearchPath(next.searchBoard, event.path);
+			return next;
+		case "search_board_hydrated":
+			applyHydratedBoard(next.searchBoard, event);
 			return next;
 	}
 }

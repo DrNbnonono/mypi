@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { budgetPressure } from "./budget.ts";
+import { generateCandidateActions } from "./candidate-generator.ts";
 import { strategyKey } from "./planner.ts";
+import { createEmptySearchBoard, openSearchIntents } from "./search-board.ts";
 import type { SecurityDecision, SecurityObserverSignal, SecurityState } from "./types.ts";
 
 function selectedStrategy(decision: SecurityDecision): string | undefined {
@@ -74,6 +76,24 @@ export function observeSecurityState(state: SecurityState): SecurityObserverSign
 				recent.map((item) => item.id),
 			),
 		);
+	const latestAction = latest
+		? latest.candidates.find((candidate) => candidate.id === latest.selectedActionId)
+		: undefined;
+	if (latestAction?.pathKey) {
+		const repeats = recent.filter((decision) => {
+			const action = decision.candidates.find((candidate) => candidate.id === decision.selectedActionId);
+			return action?.pathKey === latestAction.pathKey;
+		});
+		if (repeats.length >= 2)
+			signals.push(
+				signal(
+					"repeated-path",
+					"critical",
+					`Repeated path ${latestAction.pathKey.slice(0, 12)}; skip already explored or dead-end routes`,
+					repeats.map((item) => item.id),
+				),
+			);
+	}
 	return signals;
 }
 
@@ -123,6 +143,12 @@ export function assessTermination(state: SecurityState): TerminationAssessment {
 	const blockingVerificationIds = state.evidenceGraph.verifications
 		.filter((item) => item.status === "insufficient")
 		.map((item) => item.id);
+	if (state.competition?.submissions.some((submission) => submission.correct))
+		return {
+			complete: true,
+			reason: "Competition platform accepted a flag for this knowledge space",
+			blockingVerificationIds: [],
+		};
 	if (
 		state.ctfProfile &&
 		state.findings.some((finding) => finding.verified && /flag|capture|objective/i.test(finding.summary))
@@ -140,6 +166,14 @@ export function assessTermination(state: SecurityState): TerminationAssessment {
 		return {
 			complete: true,
 			reason: "Verified findings exist and no unresolved verification records remain",
+			blockingVerificationIds,
+		};
+	const board = state.searchBoard ?? createEmptySearchBoard();
+	const explored = board.facts.length > 0 || board.paths.length > 0;
+	if (explored && openSearchIntents(board).length === 0 && generateCandidateActions(state).candidates.length === 0)
+		return {
+			complete: true,
+			reason: "No open intents remain and bootstrap candidates are exhausted",
 			blockingVerificationIds,
 		};
 	return {
