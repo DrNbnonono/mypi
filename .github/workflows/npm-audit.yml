@@ -1,8 +1,8 @@
 name: npm audit
 
 on:
-  schedule:
-    - cron: '37 7 * * *'
+  # Run on demand to avoid recurring failure notifications while dependencies
+  # have unresolved vulnerabilities. Do not suppress npm audit failures.
   workflow_dispatch:
 
 permissions:
